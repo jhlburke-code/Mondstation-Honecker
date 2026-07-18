@@ -245,6 +245,13 @@ const SFX = {
 
 /* ---------- 4. INPUT --------------------------------------------- */
 const keys = Object.create(null);
+// click on the cabinet also starts the game (for non-keyboard users)
+document.getElementById("cabinet").addEventListener("click", () => {
+  if (!audioCtx) ensureAudio();
+  if (STATE.screen === "title" || STATE.screen === "intro") {
+    SFX.theme(); enterGame();
+  }
+}, false);
 addEventListener("keydown", (e) => {
   if (e.repeat) return;
   // first user input unlocks audio
@@ -260,12 +267,10 @@ addEventListener("keydown", (e) => {
   if ((e.key === "e" || e.key === "E" || e.key === " ") && STATE.screen === "game" && STATE.dialogue.open) {
     advanceDialogue(); return;
   }
-  // title / intro start
-  if ((e.key === " " || e.key === "Enter") && STATE.screen === "title") {
-    STATE.screen = "intro"; STATE.introLines = INTRO_TEXT.split("\n"); STATE.introTimer = 0; STATE.introDone = false; SFX.theme(); return;
-  }
-  if ((e.key === " " || e.key === "Enter") && STATE.screen === "intro" && STATE.introDone) {
-    enterGame(); return;
+  // title / intro — any key starts the game (the intro is a flavour
+  // cinematic for those who let it play; impatient users press anything).
+  if (STATE.screen === "title" || STATE.screen === "intro") {
+    SFX.theme(); enterGame(); return;
   }
   if (STATE.screen === "ending") {
     STATE.screen = "title"; return;
@@ -1257,9 +1262,8 @@ function interactKeyPressed() {
   keys["e"] = false; keys[" "] = false;
   if (STATE.dialogue.open) { advanceDialogue(); return; }
   if (!STATE.gameStarted) {
-    if (STATE.screen === "title") { STATE.screen = "intro"; STATE.introLines = INTRO_TEXT.split("\n"); STATE.introTimer = 0; STATE.introDone = false; SFX.theme(); return; }
-    if (STATE.screen === "intro" && STATE.introDone) { enterGame(); return; }
-    return;
+    // space-skips the intro from either title or intro
+    SFX.theme(); enterGame(); return;
   }
   // check NPC proximity
   const npcs = NPC_PLACEMENTS[STATE.zone] || {};
@@ -1666,7 +1670,7 @@ function renderTitle() {
   if (blink) {
     ctx.fillStyle = "#FFD700";
     ctx.font = "12px 'Press Start 2P', monospace";
-    ctx.fillText("DRÜCKE START — SPACE TASTE", SCREEN_W/2, SCREEN_H - 90);
+    ctx.fillText("DRÜCKE BELIEBIGE TASTE — ODER KLICKE", SCREEN_W/2, SCREEN_H - 90);
   }
   // fine-print disclaimer
   ctx.fillStyle = "#888";
@@ -1681,14 +1685,16 @@ function renderTitle() {
 function renderIntro() {
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
-  // crawl up
-  const offset = STATE.introTimer * 18;
+  // crawl UP (Star Wars style): text starts below the screen and scrolls up
+  const offset = STATE.introTimer * 60;  // 60 px/sec
   ctx.font = "11px 'Press Start 2P', monospace";
   ctx.fillStyle = "#FFEC00";
   ctx.textAlign = "center";
   const lines = STATE.introLines;
   for (let i = 0; i < lines.length; i++) {
-    ctx.fillText(lines[i], SCREEN_W/2, SCREEN_H - i*22 + offset);
+    // line 0 (first/lead line) starts just below the screen and rises;
+    // subsequent lines stack below it in the same column
+    ctx.fillText(lines[i], SCREEN_W/2, SCREEN_H + 30 - i*22 - offset);
   }
   // title overlay
   ctx.fillStyle = "rgba(0,0,0,0.5)";
@@ -1698,14 +1704,14 @@ function renderIntro() {
   ctx.textAlign = "center";
   ctx.fillText("MONDSTATION HONECKER", SCREEN_W/2, 24);
   // skip hint after some frames
-  if (STATE.introTimer > 3) {
+  if (STATE.introTimer > 1) {
     ctx.fillStyle = "#888";
     ctx.font = "8px 'Press Start 2P', monospace";
     ctx.fillText("[LEERTASTE] ÜBERSPRINGEN", SCREEN_W/2, SCREEN_H - 12);
   }
-  // advance crawl
-  STATE.introTimer += 1/60;
-  if (offset > 22 * lines.length + 200) {
+  // advance crawl (faster, frame-rate independent)
+  STATE.introTimer += 1/30;
+  if (offset > SCREEN_H + 100) {
     STATE.introDone = true;
   }
 }

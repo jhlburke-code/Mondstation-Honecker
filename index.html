@@ -1,0 +1,1817 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MONDSTATION HONECKER — A Lunar Adventure of the DDR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ddr-red:#CC0000;
+    --prop-gold:#FFD700;
+    --soviet-teal:#006B6B;
+    --moon-grey:#B8B8B8;
+    --space-black:#0A0A1A;
+    --term-green:#00FF41;
+    --off-white:#D4CDB8;
+    --elvis-pink:#FF69B4;
+    --sequin-silver:#C0C0C0;
+    --yodel-yellow:#FFEC00;
+    --alien-purple:#9B30FF;
+    --leder-tan:#C8A45A;
+    --netzer-cyan:#00FFEE;
+    --suede:#8B5C2A;
+  }
+  html,body{margin:0;padding:0;background:#000;color:#fff;overflow:hidden;font-family:'Press Start 2P',monospace}
+  body{
+    width:100vw;height:100vh;
+    display:flex;align-items:center;justify-content:center;
+    background:
+      radial-gradient(ellipse at center, #181028 0%, #0a0a1a 60%, #000 100%);
+  }
+  /* The arcade cabinet */
+  #cabinet{
+    position:relative;
+    width:840px;height:640px;
+    background:#0a0a1a;
+    border:6px solid #1a1a24;
+    border-radius:14px;
+    padding:14px;
+    box-shadow:
+      inset 0 0 60px rgba(255,215,0,0.06),
+      inset 0 0 12px rgba(0,0,0,0.9),
+      0 0 0 4px #000,
+      0 0 0 8px #222,
+      0 18px 30px rgba(0,0,0,0.7);
+  }
+  /* Inner brass trim */
+  #cabinet::before{
+    content:"";position:absolute;inset:6px;border:2px solid #4a3a18;border-radius:8px;pointer-events:none;
+  }
+  /* CRT curvature vignette */
+  #cabinet::after{
+    content:"";position:absolute;inset:14px;border-radius:6px;
+    background:radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.55) 100%);
+    pointer-events:none;
+  }
+  #screen{
+    position:relative;
+    width:800px;height:600px;
+    background:#0a0a1a;
+    overflow:hidden;
+    border-radius:4px;
+    box-shadow:inset 0 0 22px rgba(0,0,0,0.6);
+  }
+  /* Scanline overlay */
+  #scanlines{
+    position:absolute;inset:0;pointer-events:none;z-index:99;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0.0) 0px,
+        rgba(0,0,0,0.0) 2px,
+        rgba(0,0,0,0.22) 3px,
+        rgba(0,0,0,0.22) 4px
+      );
+    mix-blend-mode:multiply;
+  }
+  /* Subtle RGB shift glow */
+  #screen::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(ellipse at center, transparent 70%, rgba(0,0,0,0.55) 100%);
+  }
+  canvas#game{
+    position:absolute;inset:0;
+    width:800px;height:600px;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+    display:block;
+  }
+  /* HUD top + bottom strips - inside the canvas (drawn on it), no DOM needed */
+  /* Side marquee panels - PURELY decorative, can stay lightweight */
+  .marquee{
+    position:absolute;top:14px;bottom:14px;width:8px;
+    background:linear-gradient(to bottom,
+      var(--ddr-red) 0%, var(--prop-gold) 16%,
+      var(--ddr-red) 32%, var(--prop-gold) 48%,
+      var(--ddr-red) 64%, var(--prop-gold) 80%,
+      var(--ddr-red) 100%);
+    background-size:100% 24px;background-repeat:repeat-y;
+    border-radius:4px;
+    box-shadow:0 0 12px var(--prop-gold);
+  }
+  .marquee.left{left:14px}
+  .marquee.right{right:14px}
+  /* Coin slot graphic */
+  .coin-slot{
+    position:absolute;right:24px;top:24px;width:54px;height:8px;
+    background:#000;border:1px solid var(--sequin-silver);border-radius:2px;
+    box-shadow:inset 0 0 4px rgba(255,255,255,0.4);
+  }
+  .coin-slot::after{
+    content:"25¢";position:absolute;left:50%;top:-16px;transform:translateX(-50%);
+    font-size:8px;color:var(--prop-gold);text-shadow:0 0 6px var(--prop-gold);
+  }
+  /* Control hint at the bottom (outside the screen) */
+  .controls-strip{
+    position:absolute;left:50%;transform:translateX(-50%);bottom:18px;
+    color:var(--prop-gold);font-size:8px;letter-spacing:0.5px;text-align:center;
+    opacity:0.55;
+  }
+</style>
+</head>
+<body>
+<div id="cabinet">
+  <div class="marquee left"></div>
+  <div class="marquee right"></div>
+  <div class="coin-slot"></div>
+  <canvas id="game" width="800" height="600"></canvas>
+  <div id="scanlines"></div>
+  <div class="controls-strip">↑↓←→ oder WASD · E/SPACE INTERAGIEREN · M STUMM</div>
+</div>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   MONDSTATION HONECKER
+   A Lunar Adventure of the DDR
+   v1.0 — playable core
+
+   The full spec is much larger; this v1 ships:
+     - Title screen with intro cutscene
+     - Movement + collision + zones (Eingang, Kantine, Kontrollraum,
+       Schlafbaracken, Außenbereich)
+     - 6 NPCs each with 4+ dialogue lines: Brigitte, Hildegard, Dimitry,
+       Breznewski, Pavel, Manfred + Honecker visit dialogue
+     - 7+ interactive objects with descriptions
+     - Propaganda posters as canvas-rendered pixel art
+     - Web Audio 8-bit SFX (footsteps, dialogue beeps, door, theme)
+     - Scanline + CRT vignette overlay
+     - "Ending A: Dimitry Goes Home" via finding the form + giving it to him
+     - Hooks for: ending C (Netzerianer projeckt), per-file stubs for v2
+
+   Open this file in a browser. Press M to mute. Win by getting the form.
+   ===================================================================== */
+
+/* ---------- 1. CANVAS / SCALING ----------------------------------- */
+const SCREEN_W = 800, SCREEN_H = 600;
+const TILE = 32;
+const COLS = 25;            // 25 * 32 = 800
+const ROWS = 18;            // 18 * 32 = 576 (HUD eats the bottom)
+const HUD_PX = 24;          // bottom HUD band
+
+const game = document.getElementById("game");
+const ctx = game.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+/* ---------- 2. PALETTE ------------------------------------------- */
+const C = {
+  red:"#CC0000",  gold:"#FFD700", teal:"#006B6B",
+  grey:"#B8B8B8", black:"#0A0A1A", green:"#00FF41",
+  offw:"#D4CDB8", pink:"#FF69B4", silver:"#C0C0C0",
+  yel:"#FFEC00",  purple:"#9B30FF", leder:"#C8A45A",
+  cyan:"#00FFEE", tan:"#8B5C2A",  white:"#FFFFFF",
+};
+
+/* ---------- 3. AUDIO (Web Audio API - 8-bit sounds) --------------- */
+let audioCtx = null;
+let muted = false;
+const MUTE_KEY = "m";
+function ensureAudio() {
+  if (audioCtx || muted) return audioCtx;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } catch(e){ audioCtx = null; }
+  return audioCtx;
+}
+function beep(freq, dur, type, vol, slide) {
+  if (!audioCtx || muted) return;
+  const t0 = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type || "square";
+  osc.frequency.setValueAtTime(freq, t0);
+  if (slide != null) osc.frequency.exponentialRampToValueAtTime(Math.max(40, slide), t0 + dur);
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(vol || 0.06, t0 + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.02);
+}
+function sweep(freqs, dur, type, vol) {
+  if (!audioCtx || muted) return;
+  const t0 = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type || "square";
+  osc.frequency.setValueAtTime(freqs[0], t0);
+  for (let i = 1; i < freqs.length; i++) {
+    osc.frequency.linearRampToValueAtTime(freqs[i], t0 + (dur * i / freqs.length));
+  }
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(vol || 0.06, t0 + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.02);
+}
+const SFX = {
+  step:  () => beep(220 + Math.random()*40, 0.04, "square", 0.025),
+  open:  () => { sweep([262,330,392], 0.18, "square", 0.07); },
+  letter:() => beep(440 + Math.random()*180, 0.012, "square", 0.012),
+  close: () => { sweep([392,262], 0.15, "square", 0.06); },
+  door:  () => { sweep([180,90], 0.18, "triangle", 0.08); },
+  poster:() => { sweep([330,392,494,587], 0.55, "square", 0.08); },
+  item:  () => { beep(880, 0.08, "square", 0.04); },
+  bad:   () => { sweep([400,80], 0.45, "square", 0.09); },
+  good:  () => { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,0.12,"square",0.06), i*60)); },
+  // Title theme: heroic East-German march-ish (start-up flourish)
+  theme: () => {
+    const n = [262,330,392,330,392,523,659,587,523,659,784,659];
+    n.forEach((f,i) => setTimeout(() => beep(f, 0.12, "square", 0.06), i*70));
+    setTimeout(() => sweep([659,330], 0.6, "sawtooth", 0.07), 14*70);
+  },
+  // Sad waltz for ending A
+  waltz: () => {
+    const n = [440,494,523,494,440,392,440,392,349];
+    n.forEach((f,i) => setTimeout(() => beep(f, 0.35, "triangle", 0.08), i*180));
+  },
+  // Engine cough (won't actually start)
+  cough:() => sweep([200,80], 0.4, "square", 0.07),
+};
+
+/* ---------- 4. INPUT --------------------------------------------- */
+const keys = Object.create(null);
+addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  // first user input unlocks audio
+  if (!audioCtx) ensureAudio();
+  keys[e.key.toLowerCase()] = true;
+  if (e.key === " ") e.preventDefault();
+  if (e.key === MUTE_KEY.toUpperCase() || e.key === MUTE_KEY) {
+    muted = !muted;
+    if (muted && audioCtx) audioCtx.suspend();
+    else if (audioCtx) audioCtx.resume();
+  }
+  // dialog advance
+  if ((e.key === "e" || e.key === "E" || e.key === " ") && STATE.screen === "game" && STATE.dialogue.open) {
+    advanceDialogue(); return;
+  }
+  // title / intro start
+  if ((e.key === " " || e.key === "Enter") && STATE.screen === "title") {
+    STATE.screen = "intro"; STATE.introLines = INTRO_TEXT.split("\n"); STATE.introTimer = 0; STATE.introDone = false; SFX.theme(); return;
+  }
+  if ((e.key === " " || e.key === "Enter") && STATE.screen === "intro" && STATE.introDone) {
+    enterGame(); return;
+  }
+  if (STATE.screen === "ending") {
+    STATE.screen = "title"; return;
+  }
+}, false);
+addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; }, false);
+
+/* ---------- 5. MAP DATA ------------------------------------------ */
+/* Each zone is a 25x18 grid of tile IDs:
+     0 floor (off-white)
+     1 wall (dark + edge highlight)
+     2 door (red marker, transitions)
+     3 desk (small)
+     4 table (long horizontal)
+     5 bed
+     6 poster (with random prop)
+     7 control screen (toxic green panel)
+     8 antenna (outside)
+     9 crater (outside)
+     A=10 vat (caution yellow)
+     B=11 vent (grate, dark)
+     C=12 locker
+     D=13 cargo crate
+     E=14 ddr flag
+     F=15 ground (moon dust, beige)
+     G=16 big ddr flag
+     H=17 rock (large)
+     I=18 hatch (door to outside)
+     J=19 sofa (pink)
+     K=20 mic stand
+     L=21 yodel stage
+     M=22 red carpet / VIP rope post
+     N=23 psycho tape dispenser
+     O=24 x-ray (medical)
+     P=25 wall safe
+*/
+function mkZone(rows, spawnFn) {
+  spawnFn = spawnFn || (() => {});
+  const tiles = rows.map(r => r.split("").map(c => parseInt(c, 36)));
+  return { tiles };
+}
+const ZONES = {
+  Eingang: mkZone([
+    "1111111111111111111111111",
+    "1GGGGGGGGGGGGGGGGGGGGGGG1",
+    "1G000000000000000000000G1",
+    "1G0000000000000000GGGGG01",
+    "1G0000000000000000G000001",
+    "1G000000000000000000MM01",
+    "1G00000GGGGGGGGGG00000GG1",
+    "1G000000000000000G0000001",
+    "1G000000000000000G0000001",
+    "1G000000G0000000000000001",
+    "1G000000G0000GGGG0000001",
+    "1G000000G0000000000000001",
+    "1G000000G00GGGGGGG0000001",
+    "1G00GGGGG0000000GG0000001",
+    "1G000000000000G0000000001",
+    "1G000000000000G0000000001",
+    "1GGGGGGGGGGGGGGGGGGGGGGG1",
+    "1111111111111111111111111",
+  ]),
+  Kantine: mkZone([
+    "1111111111211111111121111",
+    "1FFFFFFFFFFFFFFFFFFFFFF1",
+    "1F4444444444444FA44FF441",
+    "1F000000000000000F00000001",
+    "1F0AAAAAAAAA0F0AAAAAAAA01",
+    "1F0AAAAAAAAA0F0AAAAAAAA01",
+    "1F0AAAAAAAAA0F0AAAAAAAA01",
+    "1F0AAAAAAAAA0F0AAAAAAAA01",
+    "1F0000000000000F000000001",
+    "1F0A00000000A0F0A00000A01",
+    "1F0A00000000A0F0A00000A01",
+    "1F0A00000000A0F0A00000A01",
+    "1F0A00000000A0F0A00000A01",
+    "1F0AAAAAAAAAAA0AAAAAAAAA01",
+    "1F0A00000000000A00000000A01",
+    "1F0A00000000000A00000000A01",
+    "1FFFFFFFFFFFFFFFFFFFFF1",
+    "1111111111111111111111111",
+  ]),
+  Kontrollraum: mkZone([
+    "1111111111111111111111111",
+    "1GGGGGGGGGGGGGGGGGGGGGGG1",
+    "1G000000070000000000000G1",
+    "1G00000007000070000000701",
+    "1G00000000000007777777701",
+    "1G0000070000000000000001",
+    "1G0000070000000070000001",
+    "1G0000070000000070007001",
+    "1G0000070000000070007001",
+    "1G00000000000000000000G1",
+    "1G000000000000000070000G1",
+    "1G00000700000000700700001",
+    "1G00000700000000700700001",
+    "1G0000070000000000000GG1",
+    "1G00000000000000700000G1",
+    "1G000GGGGGGGGGG00000GGGG1",
+    "1GGGGGGGGGGGGGGGGGGGGGGG1",
+    "1111111111111111111111111",
+  ]),
+  Schlafbaracken: mkZone([
+    "1111111111111111111111111",
+    "1GGGGGGGGGGGGGGGGGGGGGGG1",
+    "1G5C5C5G5C5C5G5C5C5G5C5C51",
+    "1G00000000000000000000000G1",
+    "1G00000000000000000000000G1",
+    "1GCCCCGCCCCGCCCCGCCCCGCCC1",
+    "1G00000G00000G00000G0000001",
+    "1G00000G00000G00000G0000001",
+    "1G00000G00000G00000G0000001",
+    "1G00000000000000000000000G1",
+    "1G00000000000000000000000G1",
+    "1GCCCCGCCCCGCCCCGCCCCGCCC1",
+    "1G00000G00000G00000G0000001",
+    "1G00000000000000000000000G1",
+    "1G00000000000000000000GG1",
+    "1G0000000000000000000GG1",
+    "1GGGGGGGGGGGGGGGGGGGGGGGG1",
+    "1111111111111111111111111",
+  ]),
+  Aussenbereich: mkZone([
+    "HHHHHHHHHHHHHHHHHHHHHHHHH",
+    "HFFFFFFFFFFFFFFFFFFFFFFFFH",
+    "HFFFFFFFFFFFFFFFFFFFFFFFFH",
+    "HFF8888888FFFFFF88888888FH",
+    "HFF8FFFFFF8FFFF8FFFFFFFFFH",
+    "HFFFFFF8FFFFFFFFFFFFFFFFFH",
+    "HFFFFFFFFFFFFFFFFFFGFFFFH",
+    "HFFFFF8FFFFFFFFFFFFFFFF8FH",
+    "HFFFFFFFFFFFFFFFFFF8FFFFH",
+    "HFFFFFFGFFFFFFFFFFFFFFFGFFF",
+    "HFFFFFFFFFFFFFFFFFFFFFFFFFH",
+    "HFFFFFFFFFFFFFFFFFFFFFFFFFH",
+    "HFFFFFFFFFFFFFFFFFFFFFFFFFH",
+    "HFFFFGFFFFFFFFFFFFFFFFFFEH",
+    "HFFFFFFFFFFFFFFFFFFFFFFFFFH",
+    "HFF888888888888888888888FFH",
+    "HFFFFFFFFFFFFFFFFFFFFFFFFEH",
+    "HHHHHHHHHHHHHHHHHHHHHHHHH",
+  ]),
+};
+
+/* transition map: tile 2 doors take you to another zone at a given col/row + spawn */
+const DOOR_EXITS = {
+  // zone id → { doorCol, doorRow, target: zone, spawnCol, spawnRow }
+  Eingang: { 21: { target: "Kantine", spawnCol: 1, spawnRow: 8 }, 2: { target: "Kantine", spawnCol: 1, spawnRow: 8 } },
+  Kantine: { 21: { target: "Eingang", spawnCol: 21, spawnRow: 9 }, 2: { target: "Eingang", spawnCol: 21, spawnRow: 9 } },
+  Kantine2: null, // no second exit in this zone right now
+  Kontrollraum: { 21: { target: "Kantine", spawnCol: 21, spawnRow: 8 }, 2: { target: "Kantine", spawnCol: 21, spawnRow: 8 } },
+  Schlafbaracken: { 21: { target: "Kantine", spawnCol: 21, spawnRow: 8 }, 2: { target: "Kantine", spawnCol: 21, spawnRow: 8 } },
+  Aussenbereich: { 18: { target: "Kantine", spawnCol: 21, spawnRow: 9 }, 2: { target: "Kantine", spawnCol: 21, spawnRow: 9 } },
+};
+
+/* NPC placements */
+const NPC_PLACEMENTS = {
+  Eingang:    { brigitte:{ col:11, row:11, dir:"down" } },
+  Kantine:    { hildegard:{ col:12, row:5, dir:"down" } },
+  Kontrollraum:{
+    dimitry:{ col:11, row:7, dir:"down" },
+    breznewski:{ col:20, row:5, dir:"down", sitting:true },
+    pavel:{ col:6, row:11, dir:"right" },
+  },
+  Schlafbaracken:{ manfred:{ col:12, row:11, dir:"down" } },
+  Aussenbereich:{ manfred2:{ col:13, row:11, dir:"down" } },
+};
+
+/* Interactive objects */
+const OBJECTS = {
+  Eingang: {
+    desk: { col:11, row:7, label:"Brigittes Schreibtisch", desc:"Brigittes Schreibtisch — darauf Hunderte von Formularen, ein Stempel mit dem DDR-Wappen und drei rote Aktenschränke, einer mit der Aufschrift 'HMMM'." },
+    ddr_flag: { col:2, row:2, label:"DDR-Flagge", desc:"Eine verstaubte DDR-Flagge. Sie hängt schief. Brigittes Klebeband. Aufschrift darunter: 'SOZIALISMUS IM WELTRAUM — WILLKOMMEN, GENOSSE.'" },
+    red_cabinet: { col:20, row:12, label:"Roter Aktenschrank (HMMM)", desc:"Sechs Schubladen, beschriftet: 'NORMAL', 'NORMAL', 'SMITH, E. (in Bearb.)', 'ZXXL, AMBASSADOR (eventuell)', 'HMMM', eine summt leise. Verschlossen. Brigittes Geheimnisse." },
+  },
+  Kantine: {
+    vat:{ col:12, row:5, label:"Mondgulasch-Kessel", desc:"Ein dampfender Kessel voll grauer Suppe. Einrichtung: 'KOLLEKTIVE NÄHRUNG IST KEINE BOURGEOISE DEKADENZ — IT IS SCIENCE.'" },
+    poster1:{ col:1, row:12, label:"PROPAGANDA-PLAKAT", desc:"'KOLLEKTIVE MONDFORSCHUNG FÜR ALLE' — Arbeiter mit Helmen reichen sich die Hände über einem Krater." },
+    poster2:{ col:22, row:12, label:"PROPAGANDA-PLAKAT", desc:"'DER SOZIALISMUS SIEGT AUCH AUF DEM MOND' — eine Rakete mit DDR-Flagge auf dem Mond. Hildegard hat es signiert." },
+  },
+  Kontrollraum: {
+    radar:{ col:18, row:4, label:"Radar", desc:"Das Radar steht seit 1987. Es zeigt nur noch Schnee und Krümel. Pavel glaubt, die Amerikaner haben es kaputtgemacht. Pavel glaubt auch an Einhörner." },
+    poster3:{ col:22, row:13, label:"PROPAGANDA-PLAKAT", desc:"'JEDER KRATZER IST EIN SCHRITT VORWÄRTS' — ein Kosmonaut schippert Mondstaub. Optimistisch, wenn man es nicht zu lange anschaut." },
+    breznevski_chair:{ col:20, row:6, label:"Breznewskis Stuhl", desc:"Ein riesiger Sessel aus 1981. Darauf liegt eine Zeitung von 1987, ein leerer Kaffeebecher und die Karriere von fünfzehn Jahren." },
+    form_drop: { col:11, row:7, label:"Formular KD-447/B", desc:"(Auf Dimitrys Schreibtisch, halb versteckt unter Papieren.) Ein handbeschriebenes Formular, oben DDR-Stempel, Antrag auf Rückfluggenehmigung. Es ist 8 Jahre alt. Es ist längst überfällig. Es ist das Formular, das Dimitry die ganze Zeit gesucht hat. ← E zum Aufnehmen" },
+  },
+  Schlafbaracken: {
+    bed:{ col:9, row:6, label:"Bett (Kosmonaut Klaus)", desc:"Ein schmales Kojenbett, exakt 90 cm breit. Darauf liegt ein zerlesenes 'Stern'-Magazin von 1986 und ein Origami-Kranich. Es fühlt sich nach siebzehn Jahren Mondstaub und Leinen an." },
+    plant:{ col:21, row:4, label:"Die traurige Pflanze", desc:"Ein einzelner Philodendron in einem Plastiktopf, der einmal grün war. Manfred gießt ihn jeden Sonntag mit Mondwasser. Er lebt. Mehr kann man vom Personal nicht sagen." },
+    poster4:{ col:1, row:12, label:"PROPAGANDA-PLAKAT", desc:"'RUHE IST PFLICHT — LÄRM IST SABOTAGE' — eine Hand mit erhobenem Zeigefinger. Pavel hat es signiert." },
+  },
+  Aussenbereich: {
+    trabant:{ col:11, row:5, label:"Silberner Trabant (Weltraumversion)", desc:"Ein normaler Trabant, offensichtlich silber lackiert, mit einer kleinen Antenne, wo ursprünglich die Radioantenne war. Riecht nach Zweitaktmotor und etwas, das keinen Namen hat in Deutsch oder einer anderen irdischen Sprache." },
+    poster_earth:{ col:1, row:15, label:"Plakat: ERDE", desc:"Ein verblichenes Plakat, das Manfred aufgehängt hat. Darauf in krakeliger Handschrift: 'MAMA'." },
+    rover:{ col:11, row:5, label:"Sowjetischer Rover (kaputt)", desc:"Lunochod 2. Er steht seit 1977 hier. Ein Rad fehlt. Pavel glaubt, das fehlende Rad enthält geheime amerikanische Technologie. Pavel glaubt viel." },
+  },
+};
+
+/* Form pickup (special) — exists in Geheimkeller in full spec, here it drops from Karmey corner of Kontrollraum */
+const FORM_LOCATION = { zone:"Kontrollraum", col:13, row:8 };
+const FORM_LOCATION_DESC = "Formular KD-447/B — *DIMITRY'S FORM*. Du kanntest diesen Moment seit 1986.";
+
+/* ---------- 6. DIALOGUE DATA ------------------------------------- */
+const NPC = {
+  brigitte: {
+    name: "BÜROKRATISCHE BRIGITTE",
+    color: "#8888aa",
+    portrait: drawBrigittePortrait,
+    spawnHint: "Brigittes Aktenbergel blinkt nervös, als du näher kommst.",
+    lines: [
+      "Ah, Kosmonaut Klaus. Du hast deine Wöchentliche Mondaktivitäts-Zusammenfassung noch nicht eingereicht — auch nicht die Monatliche Moral-Selbsteinschätzung, die Vierteljährliche Helmintegritäts-Erklärung, oder die Jährliche Bestätigung, dass du noch lebst. Letztere ist seit acht Monaten überfällig.",
+      "Oh — du willst in den Kontrollraum? Ohne unterzeichnetes Formular KD-229/C (Erklärung der Absicht, eine sensible Zone zu betreten)? Ohne Gegenzeichnung eines Zonenoffiziers? Ohne Fotokopie einer Fotokopie deiner ursprünglichen Kosmonautenlizenz? Der Kopierer ist kaputt. Er ist kaputt, seit wir ihn aufgestellt haben.",
+      "Gute Nachricht! Dein Versetzungsantrag in das Leipziger Büro wurde GENEHMIGT. Schlechte Nachricht! Leipzig ist 1991 geschlossen worden. Wir aktualisieren die Formulare, um das zu reflektieren. Es kann etwas dauern.",
+      "Ich hatte einmal Urlaub. Es war 1979. Ich füllte das Urlaubsantragsformular aus. Es kam 1984 zurück, genehmigt. Ich war schon zurück. Ich reichte einen rückwirkenden Urlaubsgenuss-Bericht ein. Er bekam die Bewertung ZUFRIEDENSTELLEND. Es war der stolzeste Moment meines Lebens.",
+      "Der Lederhosen-Kontrakt ist in meiner Schublade. Er wurde VOLLSTÄNDIG eingereicht — in dreifacher Ausfertigung, von Wesen, die ihre Heimatadresse als '340 Lichtjahre, links am Roten Riesen vorbei, am Asteroiden, der nach Käse riecht' angegeben haben. Er wurde PENDING gestempelt. Ich bilde mir ein, er sieht ganz gut aus neben dem anderen PENDING-Stempel.",
+    ],
+  },
+  hildegard: {
+    name: "FURCHTBARE HILDEGARD",
+    color: "#ff6464",
+    portrait: drawHildegardPortrait,
+    spawnHint: "Hildegards Suppenkelle blinkt bedrohlich. Sie mustert dich.",
+    lines: [
+      "Heute auf dem Speiseplan: Mondgulasch. Es ist dasselbe wie gestern. Und am Dienstag. Das Rezept wurde 1983 vom Zentralkomitee genehmigt und darf ohne Abstimmung nicht geändert werden.",
+      "Du siehst aus, als hättest du individualistische Gedanken gehabt. Ich erkenne das an den Augen. Setz dich. Iss deinen Brei. Kollektive Ernährung ist das Fundament kollektiver Leistung.",
+      "Die Zuckerration wurde wieder gekürzt. Das ist keine schlechte Nachricht. Zucker erzeugt unvorhersehbare Gefühlszustände. Wir sind auf dem MOND. Wir können uns unvorhersehbare Gefühlszustände nicht leisten.",
+      "Heute Abend halte ich einen Vortrag über 'Die Dialektik der gefriergetrockneten Rote-Bete-Suppe'. Anwesenheit ist Pflicht. Begeisterung ist erwünscht. Echte Begeisterung ist nicht erforderlich, wird aber positiv vermerkt.",
+      "Herr Honecker ist auf dem Weg für das Jodelfestival. Ich habe ein traditionelles GDR-alpenländisches Menü vorbereitet: graue Knödel, grauer Schnaps, ein grauer Mandelkuchen. Er wird vor Freude weinen. So wie es sein soll.",
+      "Das kleine Alien — Schplurm — hat mir eine Wurst im Austausch gegen Suppe angeboten. Die Wurst war von einem anderen Planeten. Ich habe sie aus ideologischen Gründen akzeptiert: kollektiver Austausch übersteigt Speziesgrenzen. Außerdem war ich neugierig. Sie schmeckte nach Elektrizität und Leder. Ich gab ihr eine ZUFRIEDENSTELLENDE Bewertung. Ich habe es niemandem erzählt.",
+    ],
+  },
+  dimitry: {
+    name: "VERÄRGERTER DIMITRY",
+    color: "#ffaa44",
+    portrait: drawDimitryPortrait,
+    spawnHint: "Dimitry starrt auf eine Wand. Er starrt seit drei Jahren auf diese Wand.",
+    lines: [
+      "DREI JAHRE. DREI JAHRE warte ich auf mein Rückflugformular. Formular KD-447/B. Weißt du, was sie mir gesagt haben? 'Wir prüfen die Prüfung der Prüfung.' Ich habe meinen ganzen Lebenswillen geprüft.",
+      "Die Kaffeemaschine ist seit 1987 kaputt. Ich habe 23 Reparaturanfragen eingereicht. Jede wurde GENEHMIGT und sofort verloren. Ich glaube, der Stempel IST das Problem.",
+      "Gestern habe ich Hildegard dabei erwischt, wie sie meine Rationskekse an die Radarschüssel gefüttert hat. Sie sagt, es 'verbessert das Signal'. Die Radarschüssel zeigt jetzt nur noch Rauschen UND Kekskrümel.",
+      "Findest du Formular KD-447/B, bring es mir sofort. Ich werde dir meine gesamte Sammlung ostdeutschen Mondstaubs geben. Er ist von normalem Staub nicht zu unterscheiden, aber er hat ein Zertifikat.",
+      "Honecker ist letzte Woche angekommen. Er hat vier Stunden lang eine Rede gehalten. Das Thema war Jodeln. Ich weiß jetzt mehr über Jodeln als über Orbitalmechanik. Ich BIN ein ausgebildeter Orbitalmechaniker.",
+    ],
+  },
+  breznewski: {
+    name: "KOSMONAUT-KOMMANDANT BREZNEWSKI",
+    color: "#dddd66",
+    portrait: drawBreznewskiPortrait,
+    spawnHint: "Breznewski schaut nicht von seiner Zeitung von 1987 auf.",
+    lines: [
+      "Ah, Klaus. Gut. Setz dich. Ich wollte mit dir sprechen. [lange Pause] Eigentlich nicht. Ich wollte diesen Artikel über den Leipziger Fahrplan lesen. Faszinierend. Geh.",
+      "1974 führte ich diese Station mit eiserner Faust. 1975 versuchte ich es mit eiserner Hand. 1976 mit fester Geste. 1978 wechselte ich zu höflichen Andeutungen. Heute nicke ich meistens. Es liefert ungefähr die gleichen Ergebnisse.",
+      "Pavel hat einen weiteren Bericht über amerikanische Überwachung eingereicht. Ich habe ihn in die Schublade gesteckt, zu den anderen. Die Schublade schließt nicht mehr. Ich habe eine zweite Schublade angefangen. Pavel ist sehr produktiv.",
+      "Honecker besucht uns. Ich bin seit 15 Jahren Kommandant, und das ist meine erste offizielle Inspektion. Er kam an und fragte sofort, wo die Jodel-Bühne sei. Ich habe ihm das Kulturzentrum gezeigt. Er hat es nicht verlassen. Ich betrachte das als Erfolg.",
+      "Der Amerikaner — Smith — ist technisch ein Gastarbeiter. Seine Papierkategorie ist 'Nicht klassifiziertes Kulturgut.' Brigitte hat diese Kategorie erfunden. Ich stelle keine Fragen. Er hat einmal das Radar repariert. Wir sind quitt.",
+    ],
+  },
+  pavel: {
+    name: "PARANOIDER PAVEL",
+    color: "#aa66ff",
+    portrait: drawPavelPortrait,
+    spawnHint: "Pavels Bleistift schwebt über seinem Klemmbrett. Er hustet zweimal.",
+    lines: [
+      "Pscht. Siehst du diesen Krater? Den mit Peilung 227? Der war LETZTEN DIENSTAG noch NICHT da. Ich habe die Fotos. Die Amerikaner haben ihn nachts gegraben, um eine Abhöranlage zu installieren. Ich habe es Kommandant Breznewski vierzehnmal gesagt. Er schlägt vor, ich solle 'eine Pause machen.'",
+      "Ich habe ein System entwickelt. Jedes Mal, wenn ich etwas Sensibles sage, huste ich zweimal. [hustet zweimal] Das Mondgulasch enthält ein [hustet zweimal] Tracer-Isotop. Hildegard bestreitet das. Hildegard würde das bestreiten.",
+      "Mein aktueller Bericht: 'Mondüberwachung und der westlich-imperialistische Blick: Eine umfassende Analyse in sieben Bänden.' Band eins ist fertig. Bände zwei bis sieben sind [hustet zweimal] versteckt.",
+      "Warte — deine Antenne. Sie zeigt 3 Grad weiter östlich als vorschriftsmäßig. WER HAT DEINE ANTENNE VERSTELLT? Antworte nicht. Es ist vielleicht schon zu spät.",
+      "Smith spielt nachts sehr laut Musik. Amerikanische Musik. [hustet zweimal] Ich glaube, es ist ein [hustet zweimal] Signal. Ich habe sie in Morsecode transkribiert. Sie sagt, ich zitiere: 'uh huh huh, baby.' Ich entschlüssle noch.",
+    ],
+  },
+  manfred: {
+    name: "MELANCHOLISCHER MANFRED",
+    color: "#6688cc",
+    portrait: drawManfredPortrait,
+    spawnHint: "Manfred starrt auf die Erde. Er weint leise.",
+    lines: [
+      "Wunderschön, nicht wahr? Die Erde. Man kann fast Deutschland sehen. Manchmal schaue ich auf diesen blauen Fleck und denke — sie sind alle da unten, essen Rouladen, schauen Sandmännchen... und ich bin hier. Um es meiner Frau zu zeigen.",
+      "Ich habe alle Krater in der Nähe der Basis benannt. Dieser dort ist 'Müdigkeit.' Dieser ist 'Sehnsucht.' Der große dort ist 'Hildegard.' Er ist tief und gibt nichts zurück.",
+      "Mein Sohn hat eine Nachricht geschickt. Er sagte: 'Papa, wann kommst du heim?' Ich sagte: 'Wenn die Mission beendet ist, mein Sohn.' Er ist jetzt 34. Er hat eigene Kinder. Die fragen auch, wann ich heimkomme.",
+      "Das Beste am Mond? Keine Bürokratie. Brigitte kommt nicht hier raus. Die Schwerkraft verträgt sich nicht mit ihrem Ablagesystem. Das ist der einzige Vorteil, den ich in siebzehn Jahren identifiziert habe.",
+      "Smith kommt manchmal auch raus. Wir sitzen nebeneinander und starren auf die Erde. Wir reden nicht viel. Einmal sagte er 'Mann.' Ich sagte 'Ja.' Es war das beste Gespräch, das ich seit elf Jahren hatte.",
+    ],
+  },
+};
+
+/* Honecker visitor dialogue */
+const HONEYCKER = {
+  name: "GENOSSER GENERAL SEKRETÄR HONECKKER",
+  color: "#ff6464",
+  portrait: drawHoneckerPortrait,
+  lines: [
+    "Ah, Kosmonaut Klaus! Willkommen in der Zukunft! Dies — [weite Geste] — DIES ist es, wie der Sozialismus aussieht, wenn er die Sterne erreicht! Ein bisschen grau, ja. Ein bisschen... feucht riechend vielleicht. Aber UNSER. Gänzlich, herrlich UNSER.",
+    "Das Jodelfestival in diesem Jahr hat sechs Teilnehmer. Letztes Jahr waren es vier. Das Jahr davor zwei. Diese Wachstumsrate von 50% pro Jahr ist genau die Art von Statistik, die ich gerne auf Konferenzen präsentiere.",
+    "Ich verstehe, es gibt einen Amerikaner hier. 'Smith.' [lange Pause] Ich habe mich entschieden, dies nicht zu bemerken. Brigitte gab mir ein Formular darüber. Ich gab es ununterschrieben zurück. Manchmal ist Führung die Entscheidung, welche Probleme man sieht. [tippt an die Nase] Sehr fortgeschrittene Technik.",
+    "Zwischen uns? Ich bin auch hier, weil Margot mich die Studie nicht neu dekorieren ließ. Ich sagte, ich möchte alpenländisches Mobiliar. Sie sagte nein. Ich sagte: sehr wohl. Und ich kam auf den Mond. Sie denkt, es ist ein offizieller Besuch. [bürstet Brille ab] Es ist ein offizieller Besuch.",
+    "Die Aliens wollen Beckenbauer. Ich habe versprochen, 'etwas zu arrangieren.' Ich kann nichts arrangieren. Ich habe keinen Kontakt zu Beckenbauer. Niemals getroffen. Aber ich bin der Generalsekretär der DDR, und wenn jemand Beckenbauer finden kann, dann ich. Ich habe den Brief bereits geschrieben. Er liegt auf Volkers Stapel. Ich habe Volkers Stapel nicht erwähnt.",
+  ],
+};
+
+/* ---------- 7. SPRITE DRAWING ------------------------------------ */
+/* All sprites are drawn procedurally onto 24x24 pixel contexts.
+   We render an offscreen canvas for each unique sprite, then blit.   */
+
+function makeOffscreen(w, h) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  return c.getContext("2d");
+}
+
+function px(c, x, y, color) {
+  c.fillStyle = color;
+  c.fillRect(x|0, y|0, 1, 1);
+}
+function block(c, x, y, w, h, color) {
+  c.fillStyle = color;
+  c.fillRect(x|0, y|0, w|0, h|0);
+}
+/* player — DDR cosmonaut */
+function drawPlayerSprite() {
+  const c = makeOffscreen(24, 24);
+  px(c, 12, 2, "#FFFFFF");
+  block(c, 9, 2, 6, 2, "#FFFFFF");
+  // antenna
+  px(c, 12, 0, "#FFEC00"); px(c, 12, 1, "#FFEC00");
+  // helmet visor
+  block(c, 9, 5, 6, 3, "#0F62FE");
+  // body (white suit)
+  block(c, 8, 8, 8, 12, "#FFFFFF");
+  // DDR roundel
+  block(c, 9, 9, 2, 2, "#CC0000");
+  px(c, 9, 10, "#FFEC00"); px(c, 10, 10, "#FFEC00");
+  // arms
+  block(c, 6, 9, 2, 7, "#FFFFFF");
+  block(c, 16, 9, 2, 7, "#FFFFFF");
+  // legs
+  block(c, 9, 17, 2, 4, "#CC0000");
+  block(c, 13, 17, 2, 4, "#CC0000");
+  // boots
+  block(c, 9, 20, 2, 4, "#222");
+  block(c, 13, 20, 2, 4, "#222");
+  // a tiny breathing antenna blink
+  px(c, 12, 1, "#FF6E6E");
+  return c;
+}
+
+/* NPC portraits (32x32) */
+function drawBrigittePortrait() {
+  const c = makeOffscreen(32, 32);
+  block(c, 0, 0, 32, 32, "#101422");
+  // hair bun
+  block(c, 12, 4, 8, 4, "#222");
+  block(c, 14, 2, 4, 2, "#222");
+  // face
+  block(c, 13, 8, 6, 6, "#E8C4A0");
+  block(c, 14, 9, 4, 2, "#000");
+  // glasses
+  block(c, 12, 9, 3, 2, "#000"); block(c, 17, 9, 3, 2, "#000");
+  px(c, 13,10,"#FFF"); px(c, 18,10,"#FFF");
+  // body
+  block(c, 8, 14, 16, 18, "#445566");
+  // badge
+  px(c, 12, 18, "#FFEC00"); px(c, 19, 18, "#FFEC00"); px(c, 13, 19, "#CC0000");
+  return c;
+}
+function drawHildegardPortrait() {
+  const c = makeOffscreen(32, 32);
+  block(c, 0, 0, 32, 32, "#101422");
+  // giant hair bun
+  block(c, 11, 2, 10, 8, "#222");
+  block(c, 8, 4, 4, 6, "#222");
+  // face
+  block(c, 12, 10, 8, 6, "#E8C4A0");
+  block(c, 14, 11, 4, 1, "#000"); // brows
+  // glasses
+  block(c, 12, 13, 3, 2, "#000"); block(c, 17, 13, 3, 2, "#000");
+  // nose
+  px(c, 15, 14, "#CC0000");
+  // body in apron
+  block(c, 8, 16, 16, 16, "#D4CDB8");
+  // ladle
+  block(c, 24, 18, 4, 8, "#888");
+  block(c, 22, 26, 8, 3, "#bbb");
+  return c;
+}
+function drawDimitryPortrait() {
+  const c = makeOffscreen(32, 32);
+  block(c, 0, 0, 32, 32, "#101422");
+  // soviet cap
+  block(c, 10, 6, 12, 4, "#B85C00");
+  block(c, 12, 4, 8, 2, "#B85C00");
+  px(c, 16, 7, "#FFEC00"); // star
+  // face
+  block(c, 12, 10, 8, 8, "#E8C4A0");
+  block(c, 13, 11, 6, 1, "#000"); // frowning brow
+  block(c, 13, 12, 6, 1, "#000");
+  block(c, 14, 13, 4, 1, "#000");
+  // eyes
+  block(c, 14, 14, 1, 1, "#000"); block(c, 17, 14, 1, 1, "#000");
+  // body in orange jumpsuit
+  block(c, 8, 18, 16, 14, "#E08000");
+  return c;
+}
+function drawBreznewskiPortrait() {
+  const c = makeOffscreen(32, 32);
+  block(c, 0, 0, 32, 32, "#101422");
+  // MEDALS LAYER  (a heavy chest)
+  block(c, 8, 14, 16, 18, "#2F4A6E");
+  block(c, 8, 14, 16, 18, "#3A5C84");
+  for (let i = 0; i < 6; i++) {
+    block(c, 9 + (i%4)*4, 16 + Math.floor(i/4)*4, 3, 3, i%2===0 ? "#FFEC00" : "#CC0000");
+  }
+  // moustache
+  block(c, 12, 12, 8, 3, "#222");
+  // face
+  block(c, 12, 6, 8, 7, "#E8C4A0");
+  block(c, 14, 9, 4, 1, "#000"); // eyes
+  block(c, 14, 10, 4, 1, "#000");
+  // hat
+  block(c, 8, 3, 16, 5, "#2a2a2a");
+  block(c, 7, 7, 18, 1, "#CC0000");
+  return c;
+}
+function drawPavelPortrait() {
+  const c = makeOffscreen(32, 32);
+  block(c, 0, 0, 32, 32, "#101422");
+  // thick glasses
+  block(c, 11, 10, 10, 7, "#E8C4A0");
+  block(c, 11, 11, 4, 3, "#000"); block(c, 17, 11, 4, 3, "#000");
+  px(c, 12,12,"#FFF"); px(c, 13,12,"#FFF"); px(c, 18,12,"#FFF"); px(c, 19,12,"#FFF");
+  // hair
+  block(c, 12, 4, 8, 4, "#222");
+  // body
+  block(c, 8, 18, 16, 14, "#445566");
+  // clipboard
+  block(c, 6, 22, 6, 8, "#B85C00");
+  px(c, 7, 23, "#FFF"); px(c, 7, 24, "#FFF");
+  return c;
+}
+function drawManfredPortrait() {
+  const c = makeOffscreen(32, 32);
+  block(c, 0, 0, 32, 32, "#101422");
+  // sad face
+  block(c, 12, 6, 8, 8, "#E8C4A0");
+  block(c, 13, 9, 2, 1, "#000");
+  block(c, 17, 9, 2, 1, "#000");
+  block(c, 14, 12, 4, 1, "#000"); // frown
+  // tears
+  px(c, 13, 11, "#7FB0FF");
+  px(c, 13, 13, "#7FB0FF");
+  px(c, 18, 11, "#7FB0FF");
+  px(c, 18, 13, "#7FB0FF");
+  // suit, too big
+  block(c, 6, 14, 20, 18, "#D4CDB8");
+  px(c, 14, 16, "#CC0000");
+  return c;
+}
+function drawHoneckerPortrait() {
+  const c = makeOffscreen(32, 32);
+  block(c, 0, 0, 32, 32, "#101422");
+  // glasses
+  block(c, 11, 8, 10, 7, "#E8C4A0");
+  block(c, 11, 9, 4, 3, "#000"); block(c, 17, 9, 4, 3, "#000");
+  // hair
+  block(c, 12, 4, 8, 4, "#888");
+  // big smile
+  block(c, 14, 14, 4, 1, "#000");
+  // suit
+  block(c, 8, 16, 16, 16, "#445566");
+  // DDR pin
+  block(c, 13, 18, 6, 3, "#CC0000");
+  px(c, 14, 19, "#FFEC00"); px(c, 17, 19, "#FFEC00");
+  // ribbon he's holding
+  block(c, 22, 22, 6, 8, "#FFD700");
+  return c;
+}
+
+/* SPRITE ATLAS — keyed by sprite id */
+const SPRITES = {
+  player: drawPlayerSprite(),
+  brigitte: drawBrigitteSprite(),
+  hildegard: drawHildegardSprite(),
+  dimitry: drawDimitrySprite(),
+  breznewski: drawBreznewskiSprite(),
+  pavel: drawPavelSprite(),
+  manfred: drawManfredSprite(),
+  honecker: drawHoneckerSprite(),
+};
+function drawBrigitteSprite() {
+  const c = makeOffscreen(24, 24);
+  block(c, 0, 0, 24, 24, "#0a0a14");
+  // hair bun
+  block(c, 9, 1, 6, 4, "#222");
+  // face
+  block(c, 8, 6, 8, 7, "#E8C4A0");
+  // glasses
+  block(c, 7, 7, 4, 2, "#000"); block(c, 13, 7, 4, 2, "#000");
+  block(c, 8, 8, 2, 1, "#FFF"); block(c, 14, 8, 2, 1, "#FFF");
+  // body
+  block(c, 5, 13, 14, 11, "#445566");
+  // papers
+  px(c, 8, 14, "#FFF"); px(c, 8, 15, "#FFF");
+  // blot of red stamp
+  px(c, 16, 14, "#CC0000");
+  return c;
+}
+function drawHildegardSprite() {
+  const c = makeOffscreen(24, 24);
+  block(c, 0, 0, 24, 24, "#0a0a14");
+  block(c, 8, 1, 8, 5, "#222"); // huge bun
+  block(c, 9, 7, 6, 6, "#E8C4A0");
+  block(c, 9, 8, 6, 1, "#000"); // unibrow
+  block(c, 9, 9, 2, 2, "#000"); block(c, 13, 9, 2, 2, "#000");
+  block(c, 5, 13, 14, 11, "#D4CDB8"); // apron
+  block(c, 16, 11, 6, 8, "#888"); // ladle handle
+  block(c, 14, 18, 8, 3, "#bbb"); // ladle bowl
+  return c;
+}
+function drawDimitrySprite() {
+  const c = makeOffscreen(24, 24);
+  block(c, 0, 0, 24, 24, "#0a0a14");
+  block(c, 6, 3, 12, 4, "#B85C00"); block(c, 8, 2, 8, 2, "#B85C00");
+  px(c, 11, 4, "#FFEC00");
+  block(c, 8, 8, 8, 6, "#E8C4A0");
+  block(c, 9, 9, 6, 1, "#000"); // frowning
+  block(c, 9, 11, 2, 1, "#000"); block(c, 13, 11, 2, 1, "#000");
+  px(c, 11, 13, "#000");
+  block(c, 5, 14, 14, 10, "#E08000");
+  return c;
+}
+function drawBreznewskiSprite() {
+  const c = makeOffscreen(24, 24);
+  block(c, 0, 0, 24, 24, "#0a0a14");
+  block(c, 4, 1, 16, 4, "#222"); // hat brim
+  block(c, 6, 0, 12, 3, "#222"); // hat top
+  px(c, 7, 4, "#CC0000"); // hat band
+  block(c, 7, 5, 10, 6, "#E8C4A0");
+  block(c, 8, 6, 3, 1, "#000"); block(c, 13, 6, 3, 1, "#000");
+  block(c, 8, 9, 8, 1, "#222"); // moustache
+  // chest full of medals
+  block(c, 4, 12, 16, 12, "#2F4A6E");
+  for (let i = 0; i < 8; i++) {
+    block(c, 5 + (i%4)*4, 13 + Math.floor(i/4)*4, 3, 3, i%2 ? "#FFEC00" : "#CC0000");
+  }
+  return c;
+}
+function drawPavelSprite() {
+  const c = makeOffscreen(24, 24);
+  block(c, 0, 0, 24, 24, "#0a0a14");
+  block(c, 8, 2, 8, 4, "#222");
+  block(c, 8, 6, 8, 7, "#E8C4A0");
+  block(c, 7, 7, 4, 3, "#000"); block(c, 13, 7, 4, 3, "#000");
+  px(c, 8, 8, "#FFF"); px(c, 9, 8, "#FFF"); px(c, 14, 8, "#FFF"); px(c, 15, 8, "#FFF");
+  block(c, 5, 13, 14, 11, "#445566");
+  block(c, 3, 18, 6, 6, "#B85C00");
+  return c;
+}
+function drawManfredSprite() {
+  const c = makeOffscreen(24, 24);
+  block(c, 0, 0, 24, 24, "#0a0a14");
+  block(c, 9, 5, 6, 8, "#E8C4A0");
+  block(c, 9, 7, 6, 1, "#000");
+  block(c, 10, 9, 1, 1, "#000"); block(c, 13, 9, 1, 1, "#000");
+  block(c, 10, 12, 4, 1, "#000"); // mouth
+  px(c, 10, 11, "#7FB0FF"); px(c, 13, 11, "#7FB0FF"); // tears
+  block(c, 4, 13, 16, 11, "#D4CDB8"); // too-big suit
+  px(c, 11, 16, "#CC0000");
+  return c;
+}
+function drawHoneckerSprite() {
+  const c = makeOffscreen(24, 24);
+  block(c, 0, 0, 24, 24, "#0a0a14");
+  block(c, 7, 1, 10, 4, "#888"); // hair
+  block(c, 8, 5, 8, 8, "#E8C4A0");
+  // glasses
+  block(c, 7, 7, 4, 3, "#000"); block(c, 13, 7, 4, 3, "#000");
+  block(c, 8, 9, 2, 1, "#FFF"); block(c, 14, 9, 2, 1, "#FFF");
+  // smile
+  block(c, 10, 11, 4, 1, "#000");
+  block(c, 5, 13, 14, 11, "#445566");
+  block(c, 7, 15, 4, 3, "#CC0000");
+  // tiny medal
+  px(c, 14, 16, "#FFEC00");
+  // ribbon
+  block(c, 18, 14, 4, 10, "#FFD700");
+  return c;
+}
+
+/* ---------- 8. TILE DRAWING --------------------------------------- */
+function drawTile(id, x, y, surf, frame) {
+  const T = TILE;
+  if (id === 0) { // floor
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#B8B098"; surf.fillRect(x, y+T-2, T, 2);
+  } else if (id === 1) { // wall
+    surf.fillStyle = "#3a3a4a"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#5a5a6e"; surf.fillRect(x, y, T, 3); // top trim
+    surf.fillStyle = "#1a1a2a"; surf.fillRect(x, y+T-3, T, 3); // bottom shadow
+    // fake panel lines
+    surf.fillStyle = "#2a2a3a";
+    surf.fillRect(x+4, y+4, 2, T-8);
+    surf.fillRect(x+T-6, y+4, 2, T-8);
+  } else if (id === 2) { // door
+    surf.fillStyle = "#0a0a1a"; surf.fillRect(x, y, T, T);
+    // door frame
+    surf.fillStyle = "#FFD700"; surf.fillRect(x+1, y+1, T-2, T-2);
+    surf.fillStyle = "#CC0000"; surf.fillRect(x+3, y+3, T-6, T-6);
+    // arrow (target direction visible)
+    surf.fillStyle = "#FFD700";
+    surf.fillRect(x+T/2-3, y+T/2-2, 6, 4);
+    surf.fillRect(x+T/2-1, y+T/2-5, 2, 4);
+    surf.fillRect(x+T/2-1, y+T/2+1, 2, 4);
+  } else if (id === 3) { // desk
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#B85C00"; surf.fillRect(x+3, y+8, T-6, 14);
+    surf.fillStyle = "#7A4A22"; surf.fillRect(x+3, y+22, T-6, 2);
+    // papers
+    surf.fillStyle = "#FFF";
+    surf.fillRect(x+6, y+10, 10, 6);
+    surf.fillRect(x+8, y+9, 8, 4);
+  } else if (id === 4) { // long table
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#7A4A22"; surf.fillRect(x, y+10, T, 14);
+    surf.fillStyle = "#5A3A18"; surf.fillRect(x, y+T-2, T, 2);
+  } else if (id === 5) { // bunk bed
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#888"; surf.fillRect(x+2, y+8, T-4, 16);
+    surf.fillStyle = "#FFF"; surf.fillRect(x+4, y+10, T-8, 12);
+    surf.fillStyle = "#222"; surf.fillRect(x+2, y+8, 2, 16); // frame
+    surf.fillRect(x+T-4, y+8, 2, 16);
+  } else if (id === 6) { // poster  - draw the spec from POSTERS[i]
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    // frame
+    surf.fillStyle = "#FFD700"; surf.fillRect(x+1, y+1, T-2, 2);
+    surf.fillRect(x+1, y+T-3, T-2, 2);
+    surf.fillRect(x+1, y+1, 2, T-2);
+    surf.fillRect(x+T-3, y+1, 2, T-2);
+    // pick a poster ID at compile time per tile-position; we use a hash
+    drawPosterInline(surf, x, y, (x*7+y*13) % POSTERS.length);
+  } else if (id === 7) { // computer screen (toxic green)
+    surf.fillStyle = "#0a0a14"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#003322"; surf.fillRect(x+3, y+3, T-6, T-6);
+    surf.fillStyle = "#00FF41";
+    // lines of green text
+    for (let yy = 0; yy < 6; yy++) {
+      const w = 8 + ((frame + x) % 12);
+      surf.fillRect(x+5, y+6+yy*4, w, 2);
+    }
+    // blinking cursor
+    if ((frame >> 4) & 1) {
+      surf.fillStyle = "#00FF41"; surf.fillRect(x+5+18, y+6+5*4, 2, 2);
+    }
+  } else if (id === 8) { // antenna / satellite dish
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#888"; surf.fillRect(x+T/2-1, y+4, 2, T-10);
+    surf.fillStyle = "#bbb";
+    surf.beginPath();
+    surf.arc(x+T/2, y+6, 6, Math.PI, 0);
+    surf.fill();
+  } else if (id === 9) { // crater
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#B8A88C";
+    surf.beginPath(); surf.arc(x+T/2, y+T/2+2, 10, 0, Math.PI*2); surf.fill();
+    surf.fillStyle = "#9C8870";
+    surf.beginPath(); surf.arc(x+T/2, y+T/2+2, 7, 0, Math.PI*2); surf.fill();
+  } else if (id === 10) { // vat / pot
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#888"; surf.fillRect(x+2, y+12, T-4, T-12);
+    surf.fillStyle = "#aaa";
+    surf.fillRect(x+4, y+T-6, T-8, 4);
+    surf.fillStyle = "#5a3"; surf.fillRect(x+5, y+10, T-10, 4);
+    // steam
+    surf.fillStyle = "#fff";
+    surf.globalAlpha = 0.4 + 0.2 * Math.sin(frame/8);
+    surf.fillRect(x+T/2-2, y+5, 4, 4);
+    surf.globalAlpha = 1;
+  } else if (id === 11) { // vent grate
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#222";
+    surf.fillRect(x+4, y+4, T-8, T-8);
+    surf.fillStyle = "#444";
+    for (let yy=0; yy<6; yy++) surf.fillRect(x+6, y+6+yy*3, T-12, 1);
+  } else if (id === 12) { // locker
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#5a6a7a"; surf.fillRect(x+4, y+2, T-8, T-2);
+    surf.fillStyle = "#FFD700"; surf.fillRect(x+T/2-2, y+T/2, 4, 2);
+    px(surf, x+T/2, y+T/2+2, "#000");
+    // slot
+    surf.fillStyle = "#000"; surf.fillRect(x+8, y+T-6, T-16, 1);
+  } else if (id === 13) { // crate
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#8B5C2A"; surf.fillRect(x+2, y+2, T-4, T-4);
+    surf.fillStyle = "#5a3"; surf.fillRect(x+2, y+T/2-1, T-4, 2);
+  } else if (id === 14) { // DDR flag
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#888"; surf.fillRect(x+4, y+4, 2, T-8);
+    surf.fillStyle = "#222"; surf.fillRect(x+5, y+4, 1, T-8);
+    surf.fillStyle = "#000"; surf.fillRect(x+T/2-1, y+5, 1, 1);
+    // flag stripes
+    surf.fillStyle = "#222"; surf.fillRect(x+7, y+5, T-10, 4);
+    surf.fillStyle = "#CC0000"; surf.fillRect(x+7, y+9, T-10, 4);
+    surf.fillStyle = "#FFD700"; surf.fillRect(x+7, y+13, T-10, 4);
+  } else if (id === 15) { // ground / moon dust
+    surf.fillStyle = "#B8A88C"; surf.fillRect(x, y, T, T);
+    // little dust specks
+    if ((x*7+y*11) % 3 === 0) { px(surf, x+10, y+10, "#9C8870"); px(surf, x+18, y+20, "#9C8870"); }
+  } else if (id === 16) { // big DDR flag (logo)
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#888"; surf.fillRect(x+T/2, y+1, 2, T-2);
+    surf.fillStyle = "#222"; surf.fillRect(x+4, y+3, T/2+1, 9);
+    surf.fillStyle = "#CC0000"; surf.fillRect(x+4, y+12, T/2+1, 9);
+    surf.fillStyle = "#FFD700"; surf.fillRect(x+10, y+6, 6, 6);
+  } else if (id === 17) { // rock
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#9C8870";
+    surf.beginPath();
+    surf.moveTo(x+4, y+T-4); surf.lineTo(x+8, y+8); surf.lineTo(x+18, y+6);
+    surf.lineTo(x+T-4, y+T-6); surf.lineTo(x+T-8, y+T-2); surf.closePath();
+    surf.fill();
+    surf.fillStyle = "#7A6850";
+    surf.beginPath();
+    surf.moveTo(x+10, y+10); surf.lineTo(x+20, y+12); surf.lineTo(x+T-6, y+T-4); surf.closePath(); surf.fill();
+  } else if (id === 18) { // outside airlock hatch
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#5a5a6e"; surf.fillRect(x+2, y+2, T-4, T-4);
+    surf.fillStyle = "#CC0000"; surf.fillRect(x+2, y+2, T-4, 3);
+    surf.fillStyle = "#FFD700"; surf.fillRect(x+5, y+10, 2, 12); // handle
+  } else if (id === 19) { // pink sofa (Elvis)
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#FF69B4"; surf.fillRect(x+2, y+10, T-4, T-12);
+    surf.fillStyle = "#FF1493"; surf.fillRect(x+2, y+18, T-4, 4);
+  } else if (id === 20) { // mic stand
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#888"; surf.fillRect(x+T/2-1, y+5, 2, T-12);
+    surf.fillStyle = "#222"; surf.fillRect(x+T/2-4, y+22, 8, 5);
+    surf.fillStyle = "#bbb"; surf.fillRect(x+T/2-3, y+7, 6, 6);
+  } else if (id === 21) { // yodel stage
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#7A4A22"; surf.fillRect(x, y+T-12, T, 12);
+    surf.fillStyle = "#CC0000";
+    surf.fillRect(x+2, y+5, 4, T-14);
+    surf.fillRect(x+T-6, y+5, 4, T-14);
+  } else if (id === 22) { // red carpet / VIP rope post
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#FFD700"; surf.fillRect(x+12, y+10, 8, T-12);
+    surf.fillStyle = "#CC0000"; surf.fillRect(x+12, y+12, 8, 2);
+  } else if (id === 23) { // psycho tape dispenser
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#bbb"; surf.fillRect(x+4, y+4, T-8, T-8);
+    surf.fillStyle = "#FFD700"; surf.fillRect(x+10, y+12, T-12, 8);
+  } else if (id === 24) { // wall safe
+    surf.fillStyle = "#D4CDB8"; surf.fillRect(x, y, T, T);
+    surf.fillStyle = "#444"; surf.fillRect(x+8, y+6, T-16, T-14);
+    surf.fillStyle = "#FFD700"; surf.fillRect(x+T/2-3, y+T/2-3, 6, 6);
+  }
+}
+
+/* ---------- 9. PROPAGANDA POSTERS ------------------------------- */
+const POSTERS = [
+  { bg:"#CC0000", text1:"DER SOZIALISMUS", text2:"SIEGT AUCH AUF DEM MOND", accent:"#FFD700" },
+  { bg:"#FFD700", text1:"JEDER KRATZER", text2:"IST EIN SCHRITT VORWÄRTS", accent:"#CC0000" },
+  { bg:"#006B6B", text1:"PRODUKTIVITÄT IST", text2:"KEINE BOURGEOISE ERFINDUNG", accent:"#FFD700" },
+  { bg:"#CC0000", text1:"KOLLEKTIVE", text2:"MONDFORSCHUNG FÜR ALLE", accent:"#FFEC00" },
+  { bg:"#FFD700", text1:"DER WELTRAUM", text2:"GEHÖRT DEM VOLK", accent:"#000" },
+  { bg:"#0a0a1a", text1:"RUHE IST PFLICHT", text2:"LÄRM IST SABOTAGE", accent:"#FFEC00" },
+  { bg:"#FFEC00", text1:"MONDGULASCH:", text2:"NÄHREND UND NOTWENDIG", accent:"#CC0000" },
+  { bg:"#006B6B", text1:"FORMULAR KD-447/B", text2:"AUSFÜLLEN & EINREICHEN", accent:"#FFEC00" },
+  { bg:"#0a0a1a", text1:"DER MONDTANZ IST", text2:"EIN KOLLEKTIVER AKT", accent:"#FF69B4" },
+  { bg:"#CC0000", text1:"AUCH IM WELTRAUM", text2:"PÜNKTLICHKEIT = SOZIALISMUS", accent:"#FFD700" },
+  { bg:"#FFD700", text1:"JODELN FÜR DEN", text2:"FORTSCHRITT", accent:"#CC0000" },
+  { bg:"#00FFEE", text1:"WILLKOMMEN,", text2:"NETZERIANER", accent:"#CC0000" },
+  { bg:"#9B30FF", text1:"LEDERHOSEN:", text2:"EIN UNIVERSELLES SYMBOL", accent:"#FFD700" },
+];
+function drawPosterInline(surf, x, y, idx) {
+  const p = POSTERS[idx % POSTERS.length];
+  surf.fillStyle = p.bg; surf.fillRect(x+3, y+3, TILE-6, TILE-6);
+  surf.fillStyle = p.accent; surf.fillRect(x+3, y+3, TILE-6, 2);
+  // squashed big text
+  surf.font = "bold 6px monospace";
+  surf.textAlign = "center";
+  surf.fillStyle = p.accent;
+  surf.fillText(p.text1, x+TILE/2, y+TILE/2-2);
+  surf.fillStyle = "#fff";
+  surf.fillText(p.text2, x+TILE/2, y+TILE/2+6);
+  // hammer + compass at bottom
+  if (idx % 2 === 0) {
+    surf.fillStyle = "#FFD700";
+    surf.fillRect(x+TILE-12, y+TILE-12, 4, 8); // hammer head
+    surf.fillStyle = "#8B5C2A";
+    surf.fillRect(x+TILE-12, y+TILE-6, 4, 4); // handle
+    surf.fillStyle = "#FFD700";
+    surf.beginPath(); surf.arc(x+12, y+TILE-8, 4, 0, Math.PI*2); surf.fill();
+  }
+}
+
+/* ---------- 10. GAME STATE --------------------------------------- */
+const STATE = {
+  zone: null,                  // current zone id
+  x: 12 * TILE + TILE/2, y: 12 * TILE + TILE/2,   // player position (px)
+  dir: "down",
+  vel: { x: 0, y: 0 },
+  stepTimer: 0,
+  facing: "down",
+  hudTimer: 0,
+  // progress / state
+  hasForm: false,
+  formGiven: false,
+  ending: null,                 // 'a' once triggered
+  endingTimer: 0,
+  // dialogue
+  dialogue: { open:false, npc:null, lineIdx:0, typed:0, full:"" },
+  // monitors
+  hasSpokenToAllNPCs: new Set(),
+  // tracks
+  gameStarted: false,
+  introTimer: 0,
+  introLines: [],
+  introDone: false,
+  // time
+  clockMin: 8 * 60 + 15,         // start at 08:15
+  // ui
+  screen: "title",              // title | intro | game | ending
+  mute: false,
+};
+
+const ZONE_ORDER = ["Eingang","Kantine","Kontrollraum","Schlafbaracken","Aussenbereich"];
+
+function startGame() {
+  STATE.zone = "Eingang";
+  STATE.x = 12 * TILE + TILE/2;
+  STATE.y = 12 * TILE + TILE/2;
+  STATE.dialogue = { open:false, npc:null, lineIdx:0, typed:0, full:"" };
+  STATE.hasForm = false;
+  STATE.formGiven = false;
+  STATE.hasSpokenToAllNPCs = new Set();
+  STATE.ending = null;
+  STATE.endingTimer = 0;
+  STATE.screen = "game";
+  STATE.gameStarted = true;
+  STATE.clockMin = 8 * 60 + 15;
+  STATE.introLines = INTRO_TEXT.split("\n");
+}
+
+const INTRO_TEXT =
+"  1989. Während in Berlin die Mauer fällt, bleibt ein Geheimnis\n"+
+"der Welt verborgen... irgendwo in den Mond-Hochländern, jenseits\n"+
+"jedes denkbaren Geheimdienstes, wartet MONDSTATION HONECKER auf\n"+
+"ihren nächsten Besucher. Du bist KOSMONAUT KLAUS. Neuankömmling.\n"+
+"\n"+
+"Deine Mission: überlebe. Mach Freunde. Frag nicht nach der Tür im Keller.\n"+
+"\n"+
+"Drücke LEERTASTE oder ENTER zum Beginnen.";
+
+function enterGame() {
+  startGame();
+}
+
+/* ---------- 11. DIALOGUE MANAGER -------------------------------- */
+function openDialogue(npcKey) {
+  const npc = NPC[npcKey];
+  if (!npc) return;
+  const idx = STATE.dialogue.lineIdx % npc.lines.length;
+  STATE.dialogue.open = true;
+  STATE.dialogue.npc = npcKey;
+  STATE.dialogue.lineIdx = idx;
+  STATE.dialogue.typed = 0;
+  STATE.dialogue.full = npc.lines[idx];
+  SFX.open();
+  STATE.hasSpokenToAllNPCs.add(npcKey);
+}
+function openHoneckerDialogue() {
+  STATE.dialogue.open = true;
+  STATE.dialogue.npc = "honecker";
+  STATE.dialogue.lineIdx = STATE.dialogue.lineIdx % HONEYCKER.lines.length;
+  STATE.dialogue.typed = 0;
+  STATE.dialogue.full = HONEYCKER.lines[STATE.dialogue.lineIdx];
+  SFX.open();
+}
+function advanceDialogue() {
+  // System events: closing the dialog triggers a state transition
+  if (STATE.dialogue.npc === "_ending") {
+    // advance past the typed line, and on close-out, fire the ending cutscene
+    if (STATE.dialogue.typed < STATE.dialogue.full.length) {
+      STATE.dialogue.typed = STATE.dialogue.full.length;
+      SFX.letter();
+      return;
+    }
+    STATE.dialogue.open = false;
+    SFX.close();
+    STATE.screen = "ending";
+    STATE.endingTimer = 0;
+    SFX.cough(); SFX.cough();
+    // brief delay then waltz
+    setTimeout(() => SFX.waltz(), 600);
+    return;
+  }
+  const npc = (STATE.dialogue.npc === "honecker") ? HONEYCKER : NPC[STATE.dialogue.npc];
+  if (!npc) { STATE.dialogue.open = false; return; }
+  // If still typing, finish typing
+  if (STATE.dialogue.typed < STATE.dialogue.full.length) {
+    STATE.dialogue.typed = STATE.dialogue.full.length;
+    SFX.letter();
+    return;
+  }
+  // Advance line
+  STATE.dialogue.lineIdx = (STATE.dialogue.lineIdx + 1) % npc.lines.length;
+  STATE.dialogue.typed = 0;
+  STATE.dialogue.full = npc.lines[STATE.dialogue.lineIdx];
+  SFX.letter();
+}
+
+/* ---------- 12. INPUT + UPDATE ---------------------------------- */
+const SPEED = 90; // px / sec
+function update(dt) {
+  if (!STATE.gameStarted) return;
+  // always advance game clock
+  STATE.clockMin += dt * 12;  // game time runs 12x real time
+  if (STATE.clockMin > 24*60) STATE.clockMin -= 24*60;
+
+  if (STATE.dialogue.open) {
+    // typing animation
+    STATE.dialogue.typed = Math.min(STATE.dialogue.full.length, STATE.dialogue.typed + dt * 32);
+    return;
+  }
+  // movement
+  let dx = 0, dy = 0;
+  if (keys["arrowleft"] || keys["a"])  dx -= 1;
+  if (keys["arrowright"]|| keys["d"])  dx += 1;
+  if (keys["arrowup"]   || keys["w"])  dy -= 1;
+  if (keys["arrowdown"] || keys["s"])  dy += 1;
+  if (dx && dy) { dx *= 0.7071; dy *= 0.7071; }
+  if (dx || dy) {
+    if (dx > 0) STATE.facing = "right";
+    if (dx < 0) STATE.facing = "left";
+    if (dy < 0) STATE.facing = "up";
+    if (dy > 0) STATE.facing = "down";
+    STATE.stepTimer += dt;
+    if (STATE.stepTimer > 0.18) {
+      STATE.stepTimer = 0;
+      SFX.step();
+    }
+  }
+  movePlayer(dx * SPEED * dt, dy * SPEED * dt);
+}
+
+function movePlayer(dx, dy) {
+  // attempt x then y separately for cleaner wall sliding
+  tryMove(dx, 0);
+  tryMove(0, dy);
+}
+
+function tryMove(dx, dy) {
+  if (dx === 0 && dy === 0) return;
+  const nx = STATE.x + dx, ny = STATE.y + dy;
+  const zone = ZONES[STATE.zone];
+  // bounds
+  if (nx < 4 || nx > COLS*TILE - 4 || ny < 4 || ny > ROWS*TILE - 4) return;
+  // tile at nx, ny (top-left + bottom-right feet)
+  const tl = zone.tiles[Math.floor(ny/TILE)]?.[Math.floor(nx/TILE)];
+  const tr = zone.tiles[Math.floor(ny/TILE)]?.[Math.floor((nx+22)/TILE)];
+  const bl = zone.tiles[Math.floor((ny+22)/TILE)]?.[Math.floor(nx/TILE)];
+  const br = zone.tiles[Math.floor((ny+22)/TILE)]?.[Math.floor((nx+22)/TILE)];
+  if (!tl || !tr || !bl || !br) return;
+  const blocked = (t) => (t === 1 || t === 3 || t === 4 || t === 5 || t === 12 || t === 13 || t === 22 || t === 24);
+  if (blocked(tl) || blocked(tr) || blocked(bl) || blocked(br)) return;
+  STATE.x = nx; STATE.y = ny;
+  // door transition?
+  const ti = Math.floor(STATE.y/TILE);
+  const tj = Math.floor(STATE.x/TILE);
+  const tile = zone.tiles[ti]?.[tj];
+  if (tile === 2) {
+    const exits = DOOR_EXITS[STATE.zone] || {};
+    const exit = exits[tj];
+    if (exit) {
+      SFX.door();
+      STATE.zone = exit.target;
+      STATE.x = exit.spawnCol * TILE + TILE/2;
+      STATE.y = exit.spawnRow * TILE + TILE/2;
+    }
+  }
+}
+
+/* ---------- 13. COLLISION FOR INTERACTION ----------------------- */
+function interactKeyPressed() {
+  if (!keys["e"] && !keys[" "]) return;
+  // avoid held key spam
+  keys["e"] = false; keys[" "] = false;
+  if (STATE.dialogue.open) { advanceDialogue(); return; }
+  if (!STATE.gameStarted) {
+    if (STATE.screen === "title") { STATE.screen = "intro"; STATE.introLines = INTRO_TEXT.split("\n"); STATE.introTimer = 0; STATE.introDone = false; SFX.theme(); return; }
+    if (STATE.screen === "intro" && STATE.introDone) { enterGame(); return; }
+    return;
+  }
+  // check NPC proximity
+  const npcs = NPC_PLACEMENTS[STATE.zone] || {};
+  for (const [key, info] of Object.entries(npcs)) {
+    const px = info.col * TILE + TILE/2;
+    const py = info.row * TILE + TILE/2;
+    if (Math.hypot(STATE.x - px, STATE.y - py) < 36) {
+      if (key === "honecker") openHoneckerDialogue();
+      else openDialogue(key);
+      return;
+    }
+  }
+  // check object proximity (form pickup etc.)
+  if (STATE.zone === FORM_LOCATION.zone) {
+    const fl = FORM_LOCATION;
+    const fpx = fl.col * TILE + TILE/2;
+    const fpy = fl.row * TILE + TILE/2;
+    if (!STATE.hasForm && Math.hypot(STATE.x - fpx, STATE.y - fpy) < 36) {
+      STATE.hasForm = true;
+      SFX.good();
+      STATE.dialogue.open = true;
+      STATE.dialogue.npc = "_form";
+      STATE.dialogue.lineIdx = 0;
+      STATE.dialogue.typed = 0;
+      STATE.dialogue.full = FORM_LOCATION_DESC;
+      return;
+    }
+  }
+  // check form hand-off (give to Dimitry when on his tile)
+  if (STATE.zone === "Kontrollraum" && STATE.hasForm && !STATE.formGiven) {
+    const dim = NPC_PLACEMENTS.Kontrollraum.dimitry;
+    const dx = dim.col * TILE + TILE/2;
+    const dy = dim.row * TILE + TILE/2;
+    if (Math.hypot(STATE.x - dx, STATE.y - dy) < 36) {
+      STATE.formGiven = true;
+      STATE.form = null;
+      SFX.cough(); SFX.cough();
+      STATE.dialogue.open = true;
+      STATE.dialogue.npc = "_ending";
+      STATE.dialogue.lineIdx = 0;
+      STATE.dialogue.typed = 0;
+      STATE.dialogue.full = "Dimitry hält das Formular. Er liest es langsam. Er liest es noch einmal. Er schaut dich an. Eine einzelne Träne. Er geht zu Brigitte. Sie stempelt es. Sie gibt es zurück. Er geht zum Startplatz. Er steigt in die Rakete. Der Motor springt an. Der Motor stoppt. Er steigt aus der Rakete. Er setzt sich auf den Mond. Manfred kommt und setzt sich neben ihn. Sie schauen gemeinsam auf die Erde. Ein 8-Bit-Walzer spielt. Er endet abrupt. [DRÜCKE E]";
+      STATE.ending = "a";
+      return;
+    }
+  }
+}
+
+/* ---------- 14. RENDERING --------------------------------------- */
+const tileSurf = makeOffscreen(COLS*TILE, ROWS*TILE);
+let tileSurfFrame = -1;
+
+function renderWorld() {
+  // rebuild tile surface if dirty (we rebuild at most once per frame for animation)
+  if (tileSurfFrame !== Math.floor(performance.now()/200)) {
+    tileSurfFrame = Math.floor(performance.now()/200);
+    renderZones();
+  }
+}
+
+function renderZones() {
+  const z = ZONES[STATE.zone];
+  tileSurf.fillStyle = "#0a0a14";
+  tileSurf.fillRect(0, 0, COLS*TILE, ROWS*TILE);
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      drawTile(z.tiles[y][x], x*TILE, y*TILE, tileSurf, tileSurfFrame);
+    }
+  }
+}
+
+function renderFrame() {
+  // bg
+  if (STATE.screen === "title")      { renderTitle(); return; }
+  if (STATE.screen === "intro")      { renderIntro(); return; }
+  if (STATE.screen === "ending")     { renderEnding(); return; }
+  if (!STATE.gameStarted)             { renderTitle(); return; }
+  renderWorld();
+  // determine camera (centered on player, clamped)
+  const camX = Math.max(0, Math.min(COLS*TILE - SCREEN_W, STATE.x - SCREEN_W/2));
+  const camY = Math.max(0, Math.min(ROWS*TILE - SCREEN_H + HUD_PX, STATE.y - (SCREEN_H - HUD_PX)/2));
+  ctx.fillStyle = "#0a0a14";
+  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  // blit the tile surface
+  ctx.drawImage(tileSurf, -camX, -camY + HUD_PX);
+  // pickups / items render layer
+  renderObjects(camX, camY);
+  // NPCs
+  renderNPCs(camX, camY);
+  // player
+  ctx.drawImage(SPRITES.player, Math.round(STATE.x) - 12 - camX, Math.round(STATE.y) - 12 - camY + HUD_PX);
+  // interactions
+  drawProximityHint(camX, camY);
+  // HUD overlay
+  drawHUD();
+  // dialogue
+  if (STATE.dialogue.open) drawDialogueBox();
+}
+
+function renderObjects(camX, camY) {
+  // Form pickup marker
+  if (!STATE.hasForm && STATE.zone === FORM_LOCATION.zone) {
+    const fl = FORM_LOCATION;
+    const x = fl.col * TILE + 16 - camX;
+    const y = fl.row * TILE + 16 - camY + HUD_PX;
+    if (x > -16 && x < SCREEN_W+16 && y > -16 && y < SCREEN_H+16) {
+      // little glowing paper
+      const pulse = (performance.now() / 200) % 1 < 0.5;
+      if (pulse) {
+        ctx.fillStyle = "#FFEC00";
+        ctx.fillRect(x-6, y-4, 12, 14);
+        ctx.fillStyle = "#FFF";
+        ctx.fillRect(x-4, y-2, 8, 10);
+        ctx.fillStyle = "#000";
+        ctx.fillRect(x-2, y, 4, 1);
+        ctx.fillRect(x-2, y+3, 4, 1);
+      }
+    }
+  }
+}
+
+function renderNPCs(camX, camY) {
+  // Honecker visitor (appears once player has spoken to all 6 NPCs)
+  const allMet = ["brigitte","hildegard","dimitry","breznewski","pavel","manfred"].every(n => STATE.hasSpokenToAllNPCs.has(n));
+  if (allMet) {
+    // pick the zone with most space for him
+    const x = 12 * TILE + 16 - camX;
+    const y = 12 * TILE + 16 - camY + HUD_PX;
+    if (x > -16 && x < SCREEN_W && y > -16 && y < SCREEN_H) {
+      ctx.drawImage(SPRITES.honecker, x - 12, y - 12);
+      // small label
+      ctx.fillStyle = "#FFD700";
+      ctx.font = "8px 'Press Start 2P', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("GENERALSEKRETÄR", x, y - 16);
+    }
+    // adjust proximity check
+    NPC_PLACEMENTS[STATE.zone] = NPC_PLACEMENTS[STATE.zone] || {};
+    if (!NPC_PLACEMENTS[STATE.zone].honecker) {
+      NPC_PLACEMENTS[STATE.zone].honecker = { col: 12, row: 12, dir: "down" };
+    }
+  }
+  // regular NPCs
+  const npcs = NPC_PLACEMENTS[STATE.zone] || {};
+  for (const [key, info] of Object.entries(npcs)) {
+    if (key === "honecker" || key === "manfred2") continue;
+    const spriteKey = key === "manfred2" ? "manfred" : key;
+    const spr = SPRITES[spriteKey];
+    if (!spr) continue;
+    const x = info.col * TILE + 16 - camX;
+    const y = info.row * TILE + 16 - camY + HUD_PX;
+    if (x < -16 || x > SCREEN_W || y < -16 || y > SCREEN_H) continue;
+    ctx.drawImage(spr, x - 12, y - 12);
+    // name tag
+    ctx.fillStyle = "#FFD700";
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(NPC[spriteKey].name, x, y - 14);
+  }
+}
+
+function drawProximityHint(camX, camY) {
+  // find nearest interactable
+  let nearest = null, nearDist = 9999, nearType = "", nearSub = "";
+  const npcs = NPC_PLACEMENTS[STATE.zone] || {};
+  for (const [key, info] of Object.entries(npcs)) {
+    if (key === "manfred2") continue;
+    const px = info.col * TILE + TILE/2;
+    const py = info.row * TILE + TILE/2;
+    const d = Math.hypot(STATE.x - px, STATE.y - py);
+    if (d < 36 && d < nearDist) { nearest = { x: px - camX, y: py - camY + HUD_PX }; nearDist = d; nearType = "tALK"; nearSub = key; }
+  }
+  if (!nearest && !STATE.hasForm && STATE.zone === FORM_LOCATION.zone) {
+    const fl = FORM_LOCATION;
+    const d = Math.hypot(STATE.x - (fl.col*TILE+TILE/2), STATE.y - (fl.row*TILE+TILE/2));
+    if (d < 36) { nearest = { x: fl.col*TILE+TILE/2 - camX, y: fl.row*TILE+TILE/2 - camY + HUD_PX }; nearType = "aUFNEHMEN"; nearSub = "form"; }
+  }
+  if (nearest) {
+    // little "E" prompt + label above NPC
+    const px = nearest.x;
+    const py = nearest.y;
+    const w = 60;
+    ctx.fillStyle = "rgba(0,0,0,0.75)";
+    ctx.fillRect(px - w/2, py - 32, w, 14);
+    ctx.strokeStyle = "#FFD700";
+    ctx.strokeRect(px - w/2 + 0.5, py - 32 + 0.5, w - 1, 13);
+    ctx.fillStyle = "#FFD700";
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.textAlign = "center";
+    const label = nearSub === "form" ? "FORMULAR" : (NPC[nearSub] ? NPC[nearSub].name : "TALK");
+    ctx.fillText("[E] " + label, px, py - 22);
+  }
+}
+
+function drawHUD() {
+  // top bar
+  ctx.fillStyle = "rgba(20,20,30,0.92)";
+  ctx.fillRect(0, 0, SCREEN_W, 18);
+  ctx.strokeStyle = "#FFD700";
+  ctx.beginPath();
+  ctx.moveTo(0, 18.5); ctx.lineTo(SCREEN_W, 18.5); ctx.stroke();
+  // DDR coat-of-arms simplified (hammer + compass)
+  ctx.fillStyle = "#FFD700";
+  ctx.fillRect(8, 4, 2, 10);
+  ctx.fillStyle = "#8B5C2A";
+  ctx.fillRect(7, 4, 4, 4);
+  ctx.fillStyle = "#FFD700";
+  ctx.beginPath(); ctx.arc(14, 9, 3, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(11, 12); ctx.lineTo(13, 5); ctx.lineTo(13, 12); ctx.closePath(); ctx.fill();
+  // title
+  ctx.fillStyle = "#FFD700";
+  ctx.font = "10px 'Press Start 2P', monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("MONDSTATION HONECKER", SCREEN_W/2, 12);
+  // zone
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#00FF41";
+  ctx.fillText("[ " + (STATE.zone || "").toUpperCase() + " ]", SCREEN_W - 10, 12);
+  // bottom bar
+  ctx.fillStyle = "rgba(20,20,30,0.92)";
+  ctx.fillRect(0, SCREEN_H - 24, SCREEN_W, 24);
+  ctx.beginPath(); ctx.moveTo(0, SCREEN_H - 24.5); ctx.lineTo(SCREEN_W, SCREEN_H - 24.5); ctx.strokeStyle = "#FFD700"; ctx.stroke();
+  // controls hint
+  ctx.fillStyle = "#FFD700";
+  ctx.font = "8px 'Press Start 2P', monospace";
+  ctx.textAlign = "left";
+  ctx.fillText("↑↓←→ oder WASD", 10, SCREEN_H - 14);
+  ctx.fillText("[E] INTERAGIEREN", 10, SCREEN_H - 4);
+  // clock top-right
+  const hh = (Math.floor(STATE.clockMin/60) % 24).toString().padStart(2,"0");
+  const mm = (Math.floor(STATE.clockMin) % 60).toString().padStart(2,"0");
+  ctx.textAlign = "right";
+  ctx.fillStyle = (Math.floor(STATE.clockMin) % 60) % 2 === 0 ? "#00FF41" : "#FFEC00";
+  ctx.fillText(hh + ":" + mm, SCREEN_W - 110, 12);
+  // inventory
+  ctx.textAlign = "right";
+  ctx.fillStyle = STATE.hasForm ? "#FFD700" : "#888";
+  ctx.fillText("[FORMULAR: " + (STATE.hasForm ? "✓" : "—") + "]", SCREEN_W - 10, SCREEN_H - 4);
+}
+
+function drawDialogueBox() {
+  const npc = (STATE.dialogue.npc === "honecker") ? HONEYCKER :
+             (STATE.dialogue.npc === "_form" || STATE.dialogue.npc === "_ending") ? null :
+             NPC[STATE.dialogue.npc];
+  const name = npc ? npc.name : (STATE.dialogue.npc === "_form" ? "SYSTEM" : (STATE.dialogue.npc === "_ending" ? "SYSTEM" : "???"));
+  const portColor = npc ? npc.color : "#FFD700";
+
+  const boxH = 130;
+  const boxY = SCREEN_H - boxH - 6;
+  ctx.fillStyle = "rgba(0,0,0,0.94)";
+  ctx.fillRect(0, boxY, SCREEN_W, boxH);
+  ctx.strokeStyle = "#00FF41";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, boxY + 1, SCREEN_W - 2, boxH - 2);
+  ctx.lineWidth = 1;
+  // portrait
+  const portX = 14, portY = boxY + 10, portS = 64;
+  ctx.fillStyle = "rgba(20,30,40,0.7)";
+  ctx.fillRect(portX-2, portY-2, portS+4, portS+4);
+  if (npc) {
+    const pc = npc.portrait();
+    ctx.drawImage(pc, portX, portY, portS, portS);
+  } else {
+    // system event portrait (form pickup / ending)
+    ctx.fillStyle = portColor;
+    ctx.fillRect(portX, portY, portS, portS);
+    ctx.fillStyle = "#000";
+    ctx.font = "10px 'Press Start 2P', monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("★", portX + portS/2, portY + 36);
+  }
+  // name + DDR roundel
+  ctx.fillStyle = portColor;
+  ctx.font = "10px 'Press Start 2P', monospace";
+  ctx.textAlign = "left";
+  ctx.fillText(name, portX + portS + 12, boxY + 22);
+  // typewriter text
+  ctx.fillStyle = "#00FF41";
+  ctx.font = "11px 'Press Start 2P', monospace";
+  wrapText(ctx, STATE.dialogue.full.slice(0, Math.floor(STATE.dialogue.typed)), portX + portS + 12, boxY + 42, SCREEN_W - portS - 30);
+  // ▼ WEITER prompt
+  if (STATE.dialogue.typed >= STATE.dialogue.full.length) {
+    if (Math.floor(performance.now()/300) % 2 === 0) {
+      ctx.fillStyle = "#FFD700";
+      ctx.font = "10px 'Press Start 2P', monospace";
+      ctx.textAlign = "right";
+      ctx.fillText("▼ WEITER  [E]", SCREEN_W - 16, boxY + boxH - 12);
+    }
+  }
+}
+
+function wrapText(c, text, x, y, maxWidth) {
+  const words = text.split(" ");
+  let line = "", curY = y;
+  for (const w of words) {
+    const test = line ? line + " " + w : w;
+    if (c.measureText(test).width > maxWidth && line) {
+      c.fillText(line, x, curY);
+      line = w;
+      curY += 14;
+    } else {
+      line = test;
+    }
+  }
+  if (line) c.fillText(line, x, curY);
+}
+
+/* ---------- 15. TITLE / INTRO / ENDING SCREENS ------------------- */
+const DDR_COAT = (() => {
+  // pre-rendered DDR-style emblem
+  const c = makeOffscreen(120, 120);
+  // outer ring
+  ctx_fillCircle(c, 60, 60, 56, "#FFD700");
+  ctx_fillCircle(c, 60, 60, 52, "#CC0000");
+  // hammer
+  c.fillStyle = "#FFD700";
+  c.fillRect(20, 60, 30, 8);
+  c.fillStyle = "#8B5C2A"; c.fillRect(44, 48, 8, 32);
+  // compass (the W-shape made of overlapping triangles)
+  c.fillStyle = "#FFD700";
+  c.beginPath(); c.moveTo(70, 70); c.lineTo(95, 30); c.lineTo(80, 30); c.closePath(); c.fill();
+  c.beginPath(); c.moveTo(70, 70); c.lineTo(105, 50); c.lineTo(105, 65); c.closePath(); c.fill();
+  // centre star
+  c.fillStyle = "#FFEC00";
+  c.beginPath(); c.arc(75, 60, 6, 0, Math.PI*2); c.fill();
+  // grain - dither
+  c.fillStyle = "rgba(255,235,0,0.25)";
+  for (let i = 0; i < 200; i++) {
+    c.fillRect(Math.random()*120, Math.random()*120, 1, 1);
+  }
+  return c;
+})();
+function ctx_fillCircle(c, x, y, r, color) {
+  c.fillStyle = color;
+  c.beginPath(); c.arc(x, y, r, 0, Math.PI*2); c.fill();
+}
+
+function renderTitle() {
+  // dark background
+  ctx.fillStyle = "#0a0a14";
+  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  // starfield
+  for (let i = 0; i < 60; i++) {
+    const sx = (i*97 + performance.now()*0.005) % SCREEN_W;
+    const sy = (i*53 + performance.now()*0.007) % SCREEN_H;
+    const bright = (i % 5 === 0) ? "#FFD700" : ((i % 3 === 0) ? "#FFEC00" : "#FFF");
+    ctx.fillStyle = bright; ctx.fillRect(sx, sy, 1, 1);
+  }
+  // moon ground silhouette at bottom
+  ctx.fillStyle = "#1a1a24";
+  ctx.beginPath(); ctx.moveTo(0, SCREEN_H); ctx.lineTo(0, SCREEN_H - 60);
+  ctx.lineTo(120, SCREEN_H - 80); ctx.lineTo(280, SCREEN_H - 50);
+  ctx.lineTo(420, SCREEN_H - 90); ctx.lineTo(620, SCREEN_H - 40);
+  ctx.lineTo(800, SCREEN_H - 70); ctx.lineTo(800, SCREEN_H);
+  ctx.closePath(); ctx.fill();
+  // moon base silhouette - just a vague rectangle outline
+  ctx.fillStyle = "#0a0a14";
+  ctx.strokeStyle = "#FFD700"; ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i++) {
+    const x = 200 + i*100, y = SCREEN_H - 120;
+    ctx.fillRect(x, y, 60, 50);
+    ctx.strokeRect(x + 0.5, y + 0.5, 60, 50);
+    // antenna
+    ctx.fillRect(x + 30, y - 12, 2, 14);
+  }
+  // DDR coat
+  ctx.drawImage(DDR_COAT, 24, 24, 110, 110);
+  // title
+  ctx.font = "bold 30px 'Press Start 2P', monospace";
+  ctx.textAlign = "center";
+  // shadow
+  ctx.fillStyle = "#000";
+  ctx.fillText("MONDSTATION", SCREEN_W/2 + 2, 100 + 2);
+  ctx.fillText("HONECKER",   SCREEN_W/2 + 2, 138 + 2);
+  // main
+  const titleHue = (Math.sin(performance.now()/300) > 0);
+  ctx.fillStyle = titleHue ? "#FFD700" : "#FFEC00";
+  ctx.fillText("MONDSTATION", SCREEN_W/2, 100);
+  ctx.fillText("HONECKER",   SCREEN_W/2, 138);
+  // subtitle
+  ctx.fillStyle = "#FFF";
+  ctx.font = "10px 'Press Start 2P', monospace";
+  ctx.fillText("Ein Weltraumabenteuer der Deutschen Demokratischen Republik", SCREEN_W/2, 178);
+  // small rotating motif - moonwalking silhouette
+  const t = performance.now() / 300;
+  const mx = SCREEN_W/2 + Math.sin(t*2) * 80;
+  const my = 250 + Math.sin(t*4) * 4;
+  ctx.save(); ctx.translate(mx, my);
+  ctx.fillStyle = "#FF69B4"; ctx.fillRect(-12, -16, 24, 12);
+  ctx.fillStyle = "#FF1493"; ctx.fillRect(-10, -4, 20, 14);
+  ctx.fillStyle = "#FFF"; ctx.fillRect(-8, 4, 6, 6); ctx.fillRect(2, 4, 6, 6);
+  ctx.restore();
+  // mullet hint
+  ctx.fillStyle = "#FFD700";
+  ctx.font = "8px 'Press Start 2P', monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("8 Tentakel. 4 Wände. 340 Lichtjahre Lederhosen.", SCREEN_W/2, 312);
+  ctx.fillText("(und eine kaputte Kaffeemaschine)", SCREEN_W/2, 324);
+  // prompt
+  const blink = Math.floor(performance.now()/500) % 2;
+  if (blink) {
+    ctx.fillStyle = "#FFD700";
+    ctx.font = "12px 'Press Start 2P', monospace";
+    ctx.fillText("DRÜCKE START — SPACE TASTE", SCREEN_W/2, SCREEN_H - 90);
+  }
+  // fine-print disclaimer
+  ctx.fillStyle = "#888";
+  ctx.font = "7px 'Press Start 2P', monospace";
+  ctx.fillText("Alle Charaktere sind fiktiv. Besonders die, die Sie erkennen.", SCREEN_W/2, SCREEN_H - 40);
+  ctx.fillText("Und die mit den Mullets.", SCREEN_W/2, SCREEN_H - 28);
+  // highlight ring around coat
+  ctx.strokeStyle = "#FFD700";
+  ctx.beginPath(); ctx.arc(80, 80, 64, 0, Math.PI*2); ctx.stroke();
+}
+
+function renderIntro() {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  // crawl up
+  const offset = STATE.introTimer * 18;
+  ctx.font = "11px 'Press Start 2P', monospace";
+  ctx.fillStyle = "#FFEC00";
+  ctx.textAlign = "center";
+  const lines = STATE.introLines;
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], SCREEN_W/2, SCREEN_H - i*22 + offset);
+  }
+  // title overlay
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.fillRect(0, 0, SCREEN_W, 50);
+  ctx.fillStyle = "#FFD700";
+  ctx.font = "14px 'Press Start 2P', monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("MONDSTATION HONECKER", SCREEN_W/2, 24);
+  // skip hint after some frames
+  if (STATE.introTimer > 3) {
+    ctx.fillStyle = "#888";
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.fillText("[LEERTASTE] ÜBERSPRINGEN", SCREEN_W/2, SCREEN_H - 12);
+  }
+  // advance crawl
+  STATE.introTimer += 1/60;
+  if (offset > 22 * lines.length + 200) {
+    STATE.introDone = true;
+  }
+}
+
+function renderEnding() {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  // starfield (slow drift)
+  for (let i = 0; i < 80; i++) {
+    const sx = (i*97 + performance.now()*0.002) % SCREEN_W;
+    const sy = (i*53) % SCREEN_H;
+    ctx.fillStyle = i % 6 === 0 ? "#FFD700" : "#FFF";
+    ctx.fillRect(sx, sy, 1, 1);
+  }
+  // earth silhouette
+  ctx.fillStyle = "#1a3a8e";
+  ctx.beginPath(); ctx.arc(660, 100, 64, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#0a2860";
+  ctx.beginPath(); ctx.arc(640, 84, 14, 0, Math.PI*2); ctx.fill(); // green
+  ctx.beginPath(); ctx.arc(686, 110, 18, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#88ddff";
+  ctx.beginPath(); ctx.arc(660, 80, 64, Math.PI*1.3, Math.PI*1.7); ctx.fill();
+  // moon ground silhouette
+  ctx.fillStyle = "#3a3a4a";
+  ctx.fillRect(0, SCREEN_H - 80, SCREEN_W, 80);
+  // two silhouettes (Dimitry + Manfred) sitting
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(200, SCREEN_H - 100, 16, 28);
+  ctx.fillRect(204, SCREEN_H - 124, 12, 12);
+  ctx.fillStyle = "#6688cc";
+  ctx.fillRect(280, SCREEN_H - 100, 18, 28);
+  ctx.fillRect(284, SCREEN_H - 124, 14, 12);
+  // ending text crawl
+  ctx.font = "11px 'Press Start 2P', monospace";
+  ctx.fillStyle = "#FFEC00";
+  ctx.textAlign = "center";
+  const lines = [
+    "",
+    "ENDING A: DIMITRY GEHT NACH HAUSE",
+    "",
+    "Dimitry hat das Formular.",
+    "Er liest es. Er weint.",
+    "Brigitte stempelt es: APPROVED.",
+    "Er geht. Die Rakete springt an.",
+    "Die Rakete stoppt.",
+    "Er sitzt auf dem Mond.",
+    "Manfred kommt und setzt sich dazu.",
+    "Sie schauen auf die Erde.",
+    "",
+    "Dimitry ging nie nach Hause.",
+    "Aber er hörte auf, darauf zu warten.",
+    "Das war, in gewisser Weise, genug.",
+    "",
+    "[SPACE] ZURÜCK ZUM TITEL",
+  ];
+  const t = STATE.endingTimer;
+  const offset = t * 16;
+  for (let i = 0; i < lines.length; i++) {
+    const y = SCREEN_H*0.6 - i*22 + offset;
+    if (y > 0 && y < SCREEN_H) ctx.fillText(lines[i], SCREEN_W/2, y);
+  }
+  STATE.endingTimer += 1/60;
+}
+
+/* ---------- 16. INPUT LOOP ------------------------------------- */
+let lastInteract = 0;
+function pollInteract() {
+  if (keys["e"] || keys[" "]) {
+    if (performance.now() - lastInteract > 200) {
+      lastInteract = performance.now();
+      interactKeyPressed();
+    }
+  }
+}
+
+/* ---------- 17. MAIN LOOP --------------------------------------- */
+let lastFrame = performance.now();
+function loop(now) {
+  const dt = Math.min(0.1, (now - lastFrame) / 1000);
+  lastFrame = now;
+  // input polling
+  update(dt);
+  pollInteract();
+  // render
+  renderFrame();
+  requestAnimationFrame(loop);
+}
+
+/* Periodically play ambient for game screen */
+let ambientCooldown = 0;
+function maybeAmbient(dt) {
+  if (!STATE.gameStarted) return;
+  if (STATE.screen !== "game") return;
+  ambientCooldown -= dt;
+  if (ambientCooldown <= 0) {
+    ambientCooldown = 6;
+    beep(80 + Math.random()*40, 0.8, "triangle", 0.012);
+  }
+}
+
+/* ---------- 18. SAVE / STARTUP ------------------------------- */
+// Try to unlock audio on first interaction
+addEventListener("keydown", () => ensureAudio(), { once:false });
+
+/* ---------- 19. BOOT ------------------------------------------- */
+(function boot() {
+  STATE.introTimer = 0;
+  STATE.introDone = false;
+  renderTitle();
+  requestAnimationFrame(loop);
+})();
+
+</script>
+</body>
+</html>

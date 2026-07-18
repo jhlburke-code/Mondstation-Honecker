@@ -1354,8 +1354,20 @@ function renderFrame() {
   renderObjects(camX, camY);
   // NPCs
   renderNPCs(camX, camY);
-  // player
-  ctx.drawImage(SPRITES.player, Math.round(STATE.x) - 12 - camX, Math.round(STATE.y) - 12 - camY + HUD_PX);
+  // PLAYER — a bright "you-are-here" circle first (always visible),
+  // then the sprite on top. Belt-and-suspenders so the player is never lost.
+  const pxX = Math.round(STATE.x) - camX;
+  const pxY = Math.round(STATE.y) - camY + HUD_PX;
+  ctx.fillStyle = "rgba(255,236,0,0.35)";
+  ctx.beginPath(); ctx.arc(pxX, pxY, 18, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#FFEC00";
+  ctx.beginPath(); ctx.arc(pxX, pxY, 4, 0, Math.PI*2); ctx.fill();
+  ctx.drawImage(SPRITES.player, pxX - 12, pxY - 12);
+  // small "KLAUS" label above the player
+  ctx.fillStyle = "#FFD700";
+  ctx.font = "7px 'Press Start 2P', monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("KLAUS", pxX, pxY - 18);
   // interactions
   drawProximityHint(camX, camY);
   // HUD overlay

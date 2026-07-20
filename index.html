@@ -124,7 +124,7 @@
 </style>
 </head>
 <body>
-<div id="cabinet">
+<div id="cabinet" tabindex="0" aria-label="Mondstation Honecker game window. Use arrow keys or WASD to move, E to interact.">
   <div class="marquee left"></div>
   <div class="marquee right"></div>
   <div class="coin-slot"></div>
@@ -253,10 +253,16 @@ document.getElementById("cabinet").addEventListener("click", () => {
   }
 }, false);
 addEventListener("keydown", (e) => {
-  if (e.repeat) return;
-  // first user input unlocks audio
-  if (!audioCtx) ensureAudio();
+  // Skip browser-level keys we never want to handle (and that would otherwise
+  // re-fire side effects on every key repeat).
+  if (e.key === "Tab" || e.key === "F5" || e.key === "F12") return;
+  // FIX: always set the key state first (including on auto-repeat) so
+  // movement is never silently dropped. The e.repeat short-circuit only
+  // skips SIDE EFFECTS (audio, screen transitions) below.
   keys[e.key.toLowerCase()] = true;
+  if (e.repeat) return;
+  // first user input unlocks audio (only on initial press)
+  if (!audioCtx) ensureAudio();
   if (e.key === " ") e.preventDefault();
   if (e.key === MUTE_KEY.toUpperCase() || e.key === MUTE_KEY) {
     muted = !muted;
@@ -1177,6 +1183,13 @@ function advanceDialogue() {
     SFX.letter();
     return;
   }
+  // FIX: instead of cycling forever, close the dialogue when the player
+  // hits the last line. This is the fix for "stuck in a cyclic NPC chat".
+  if (STATE.dialogue.lineIdx >= npc.lines.length - 1) {
+    STATE.dialogue.open = false;
+    SFX.close();
+    return;
+  }
   // Advance line
   STATE.dialogue.lineIdx = (STATE.dialogue.lineIdx + 1) % npc.lines.length;
   STATE.dialogue.typed = 0;
@@ -1833,6 +1846,11 @@ addEventListener("keydown", () => ensureAudio(), { once:false });
   STATE.introTimer = 0;
   STATE.introDone = false;
   renderTitle();
+  // FIX: focus the cabinet so keydowns work immediately. Without this,
+  // the very first arrow-key press can fail to register if the page has
+  // never been clicked (no focus on the cabinet, the keys event fires on
+  // window but the game state can fail to advance in some browsers).
+  try { document.getElementById("cabinet").focus({ preventScroll: true }); } catch(_) {}
   requestAnimationFrame(loop);
 })();
 
